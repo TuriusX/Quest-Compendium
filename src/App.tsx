@@ -70,6 +70,7 @@ import { followRunning, runningId, tabForGame, type FollowState, type ResolvedGa
 import { guideApi } from './utils/guideApi';
 import { displayGameName } from './utils/gameName';
 import { DetectionLine, type Detection } from './components/DetectionLine';
+import { asideGameIn } from './utils/asideGame';
 import { gameSpacesOn, learn, resolveProgram, type ProgramGame } from './utils/learnedGames';
 import { applyTabs, assignGame, emptySpaces, importPlan, newPlaythrough, playthroughsOf, readSpaces, renamePlaythrough, splitMerged, switchPlaythrough, toTabs, writeSpaces, type SpacesState } from './utils/spacesStore';
 import { loadCloudSpaces, mergeSpaces, saveCloudSpaces } from './utils/spacesCloud';
@@ -384,6 +385,8 @@ export default function App() {
   /** The running game (runningId) offered "Open a tab for X?", and the one just switched to ("Switched to X", X its tab's name). */
   const [offerFor, setOfferFor] = useState<string | null>(null);
   const [switchedFor, setSwitchedFor] = useState<{ id: string; name: string } | null>(null);
+  /** The tab just opened for a game (createdFor), so Undo can close it and go back to where the player was. */
+  const [createdFor, setCreatedFor] = useState<{ id: string; tabId: string; prevTabId: string | null; name: string } | null>(null);
   const programVerdict = useMemo(() => resolveProgram(programGame, settings.learnedPrograms), [programGame, settings.learnedPrograms]);
   const globalActiveGame: SteamGameData | null = steamGame || (programVerdict.state === 'game' ? programVerdict.game : null);
 
@@ -599,6 +602,7 @@ export default function App() {
     onSwitch: openRunningTab,
     ...(offerFor && offerFor === runId && !runningOpen ? { offer: { onOpen: openRunningTab, onDismiss: () => setOfferFor(null) } } : {}),
     ...(switchedFor && switchedFor.id === runId ? { switched: switchedFor.name } : {}),
+    ...(createdFor && createdFor.id === runId ? { created: { name: createdFor.name, onUndo: () => undoCreated() } } : {}),
     ...(programVerdict.state === 'ask' && !steamGame && programGame
       ? {
           confirm: {
@@ -729,21 +733,58 @@ export default function App() {
   // X" for a few seconds, beside the book too when the panel is hidden), or "Open a tab for X?" when it has none. Once
   // the resolver has answered (or given up) and the tabs are loaded, and only when a game starts (or is running when
   // the app opens): a compendium picked by hand stays.
+  // Seamless (owner, Nov 19 2026): a game with no compendium gets one ("Opened a tab for X · Undo"), and a compendium
+  // picked by hand while the game runs stays only while the panel is in front: back in the game (the panel hidden or
+  // the game focused: away), the game's own is open again.
   const followRef = useRef<FollowState>({ id: null, goneAt: 0 });
+  const [away, setAway] = useState(() => typeof document !== 'undefined' && (document.hidden || !document.hasFocus()));
+  useEffect(() => {
+    const on = () => setAway(document.hidden || !document.hasFocus());
+    document.addEventListener('visibilitychange', on);
+    window.addEventListener('focus', on);
+    window.addEventListener('blur', on);
+    return () => { document.removeEventListener('visibilitychange', on); window.removeEventListener('focus', on); window.removeEventListener('blur', on); };
+  }, []);
   useEffect(() => {
     if (isInitializing || !tabs.length || (runId && !resolvedNow)) return;
-    const r = followRunning(followRef.current, runId, Date.now(), { matchTabId: runningTab?.id || null, activeTabId: activeTab?.id || null, auto: settings.autoSwitchGames !== false });
+    const r = followRunning(followRef.current, runId, Date.now(), {
+      matchTabId: runningTab?.id || null, activeTabId: activeTab?.id || null, auto: settings.autoSwitchGames !== false,
+      away, declined: !!runId && (settings.noAutoTab || []).includes(runId),
+    });
     followRef.current = r.state;
     const action = r.action;
     if (action.kind === 'switch') {
       const name = tabs.find((t) => t.id === action.tabId)?.name || globalActiveGame?.name || '';
       handleSelectTab(action.tabId);
-      setSwitchedFor({ id: runId!, name });
-      (window as any).electronAPI?.trackerHeads?.(`✓ ${tr('detect.switched', { game: displayGameName(name) })}`);
+      if (!action.quiet) {
+        setSwitchedFor({ id: runId!, name });
+        (window as any).electronAPI?.trackerHeads?.(`✓ ${tr('detect.switched', { game: displayGameName(name) })}`);
+      }
+    } else if (action.kind === 'create' && globalActiveGame) {
+      const prevTabId = activeTab?.id || null;
+      const name = displayGameName(resolvedNow?.game || globalActiveGame.name);
+      const tabId = handleCreateTab(name, { ...globalActiveGame, name: Number(globalActiveGame.appId) > 0 ? globalActiveGame.name : name, isAutoDetected: false }, resolvedNow?.key || undefined);
+      setCreatedFor({ id: runId!, tabId, prevTabId, name });
+      (window as any).electronAPI?.trackerHeads?.(`✓ ${tr('detect.created', { game: name })}`);
     } else if (action.kind === 'offer') {
       setOfferFor(runId);
     }
-  }, [runId, resolvedNow, isInitializing, tabs.length > 0]);
+  }, [runId, resolvedNow, isInitializing, tabs.length > 0, away, runningTab?.id]);
+  useEffect(() => {
+    if (!createdFor) return;
+    const t = setTimeout(() => setCreatedFor(null), 8000);
+    return () => clearTimeout(t);
+  }, [createdFor]);
+  const undoCreated = () => {
+    const c = createdFor;
+    if (!c) return;
+    setCreatedFor(null);
+    const tab = tabs.find((t) => t.id === c.tabId);
+    // Only a tab still as it was made (nothing asked in it yet) is closed; the game is remembered so it isn't made again.
+    if (tab && !tab.messages.some((m) => m.role === 'user')) handleDeleteTab(c.tabId);
+    if (c.prevTabId && tabs.some((t) => t.id === c.prevTabId)) setActiveTabId(c.prevTabId);
+    setSettings((s) => ({ ...s, noAutoTab: [...new Set([...(s.noAutoTab || []), c.id])].slice(-50) }));
+  };
   useEffect(() => {
     if (!switchedFor) return;
     const t = setTimeout(() => setSwitchedFor(null), 4000);
@@ -2950,8 +2991,47 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     }
   };
 
-  const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash', quick?: string) => {
+  /** A question waiting for the running game's compendium to open (target) or for the game to be known (null). */
+  const pendingAskRef = useRef<{ args: readonly [string, string?, string?, ('pro' | 'flash')?, string?]; target: string | null; at: number } | null>(null);
+  const sendRef = useRef<(...a: any[]) => Promise<void>>(async () => {});
+  // Each render's handleSendMessage (looked up when called, so it always sees the open compendium as it is then).
+  sendRef.current = (...a: any[]) => (handleSendMessage as any)(...a);
+  useEffect(() => {
+    const p = pendingAskRef.current;
+    if (!p) return;
+    const ready = p.target ? activeTab?.id === p.target : !runId || !!resolvedNow;
+    if (!ready) return;
+    pendingAskRef.current = null;
+    // Asked in the game's compendium now (a question that waited for the game's name is routed again).
+    void sendRef.current(...p.args, p.target ? { routed: true } : undefined);
+  }, [activeTab?.id, resolvedNow, runId]);
+  const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash', quick?: string, opts?: { routed?: boolean }) => {
     if (!activeTab) return;
+    // The running game's compendium (owner, Nov 19 2026: questions "always go to the running game silently"): asked from
+    // another compendium, the game's own opens and the question is asked there; asked in the first seconds of a game,
+    // before it's known, the question waits for it (pendingAsk; at most a few seconds). A question that names the open
+    // compendium's game is about it, and stays.
+    const typed = !audioBase64 && !!text && ![tr('chat.defaultShotQ'), tr('chat.defaultQ'), tr('chat.referencePicture')].includes(text);
+    if (!opts?.routed) {
+      const args = [text, imageBase64, audioBase64, preferredModel, quick] as const;
+      const queue = (target: string | null) => {
+        const p = { args, target, at: Date.now() };
+        pendingAskRef.current = p;
+        // Never lost: if the switch or the game's name doesn't come, it's asked where the player is.
+        setTimeout(() => { if (pendingAskRef.current === p) { pendingAskRef.current = null; void sendRef.current(...args, { routed: true }); } }, 5000);
+      };
+      if (runId && !resolvedNow) { queue(null); return; }
+      const home = settings.autoSwitchGames !== false && runningTab ? runningTab : null;
+      if (home && home.id !== activeTab.id && !(typed && asideGameIn(text, tabs, home.id)?.tabId === activeTab.id)) {
+        queue(home.id);
+        handleSelectTab(home.id);
+        return;
+      }
+    }
+    // A side question: about another game the player has a compendium for. Answered as that game's (no screenshot, place,
+    // memory or quest log of this one), kept out of this game's history, and filed in that game's compendium after.
+    const aside = typed ? asideGameIn(text, tabs, activeTab.id) : null;
+    const asideTab = aside ? tabs.find((t) => t.id === aside.tabId) : undefined;
     markAsked(); // a new web app version no longer reloads this page
     // The last answer's drawing over the game is about the last question: it goes when a new one is asked.
     (window as any).electronAPI?.hideDrawnLayer?.();
@@ -2975,7 +3055,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       text,
       imageUrl: imageBase64,
       audioBase64,
-      timestamp: now
+      timestamp: now,
+      ...(aside ? { aside: aside.name } : {}),
     };
 
     // Optimistically update UI with updated lastActive timestamp
@@ -3049,7 +3130,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         api.askOverGame({
           question: audioBase64 ? tr('pad.cardSpoken') : standIn ? tr('pad.shotAsk') : String(text || '').slice(0, 200),
           mode: document.documentElement.classList.contains('qc-pad') ? 'pad' : 'keys',
-          screen: typeof imageBase64 === 'string' && imageBase64.startsWith('data:image') ? imageBase64 : undefined,
+          screen: !aside && typeof imageBase64 === 'string' && imageBase64.startsWith('data:image') ? imageBase64 : undefined,
         });
       }
       // The pop-up card says it's on its way, and to which model.
@@ -3073,8 +3154,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           // Only what the server reads (server.ts: the last 6 messages' role and text; whether there are any): never
           // the earlier screenshots, drawn pictures or markers, which made every question upload the whole
           // conversation (session companion step 0, Nov 18 2026).
-          history: activeTab.messages.slice(-6).map((m) => ({ role: m.role, text: typeof m.text === 'string' ? m.text : '' })),
-          imageBase64,
+          history: (aside ? asideTab?.messages || [] : activeTab.messages.filter((m) => !m.aside && !m.asideMoved)).filter((m) => !m.aside && !m.asideMoved).slice(-6).map((m) => ({ role: m.role, text: typeof m.text === 'string' ? m.text : '' })),
+          // A side question: this game's screenshot isn't about the other game.
+          imageBase64: aside ? undefined : imageBase64,
           audioBase64,
           aiMode: settings.aiMode,
           // The model picked next to the send button (Pro or Fast); the server answers with the other one when it's used up.
@@ -3085,34 +3167,34 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           ...(quick ? { quick } : {}),
           // This app shows hint levels (session companion step 2): a hint comes with its rule and answer, hidden.
           ...(quick === 'hint' || quick === 'hintInstead' ? { hintLevels: true } : {}),
-          isGameRunningLocally: runningOpen,
+          isGameRunningLocally: runningOpen && !aside,
           // The guide the app found for this game (the server checks it), and the compendium's name, so answers use the
           // same guide as the quest log whatever Steam calls the game.
-          guideKey: trackerGameRef.current.guideKey || undefined,
-          tabName: activeTab?.name,
-          activeGame: activeGame ? {
+          guideKey: (aside ? asideTab?.guideKey : trackerGameRef.current.guideKey) || undefined,
+          tabName: aside ? aside.name : activeTab?.name,
+          activeGame: aside ? (asideTab?.activeSteamGame?.name ? { name: asideTab.activeSteamGame.name, appId: asideTab.activeSteamGame.appId } : { name: aside.name }) : activeGame ? {
             name: activeGame.name,
             appId: activeGame.appId,
             genre: activeGame.genre,
             developer: activeGame.developer
           } : null,
-          achievements: activeGame?.achievements || [],
-          news: activeGame?.patchNotes || [],
+          achievements: aside ? [] : activeGame?.achievements || [],
+          news: aside ? [] : activeGame?.patchNotes || [],
           generateBanner: false, // AI banner art is retired
           language: aiLanguageName(settings.language),
           // On-screen markers (Settings): off, the answer doesn't spend tokens on markers nobody would see.
-          markers: settings.showPointersOnScreen !== false,
+          markers: !aside && settings.showPointersOnScreen !== false,
           // Where the player is in this playthrough (confirmed by them, or the AI's last guess), unless it has to be
           // checked again (the game started, the tab was switched to): then nothing, rather than an old place.
-          place: !dueAt || (activeTab.place?.checkedAt || 0) >= dueAt ? activeTab.place || null : null,
+          place: aside ? null : !dueAt || (activeTab.place?.checkedAt || 0) >= dueAt ? activeTab.place || null : null,
           // Progress memory: what the player has already done in this game, so answers never send them back.
-          done: memoryOn ? doneForRequest(settings.gameDone?.[gameProgressKey(activeTab)]) : [],
+          done: memoryOn && !aside ? doneForRequest(settings.gameDone?.[gameProgressKey(activeTab)]) : [],
           // Playthrough memory: choices made, key items and (if the player wants) their Notes. Off: nothing is sent.
-          ...(memoryOn ? { playthrough: playthroughForRequest(play, activeTab.notes) || { choices: [], found: [], notes: '' } } : {}),
+          ...(memoryOn && !aside ? { playthrough: playthroughForRequest(play, activeTab.notes) || { choices: [], found: [], notes: '' } } : {}),
           // The quest log's current objective (its unticked steps): the answer ticks the ones the question says are done.
-          ...(objectiveForRequest(activeTab) ? { objective: objectiveForRequest(activeTab) } : {}),
+          ...(!aside && objectiveForRequest(activeTab) ? { objective: objectiveForRequest(activeTab) } : {}),
           // The guide area's ticked entries: the answer only marks guide entries the player hasn't ticked.
-          ...(trackerGameRef.current.guideArea ? { guideDone: { slug: trackerGameRef.current.guideArea.slug, ids: [...trackerGameRef.current.guideArea.done].slice(0, 300) } } : {}),
+          ...(!aside && trackerGameRef.current.guideArea ? { guideDone: { slug: trackerGameRef.current.guideArea.slug, ids: [...trackerGameRef.current.guideArea.done].slice(0, 300) } } : {}),
         }),
       });
       clearTimeout(timeoutId);
@@ -3185,6 +3267,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       }
 
       const data = await res.json();
+      // A side question changes nothing about this game: no markers, place, quest log, fight or memory from its answer.
+      if (aside && data && typeof data === 'object') for (const k of ['points', 'steps', 'place', 'placeRead', 'objectiveDone', 'combat', 'noFight', 'fight', 'nowGoal', 'nearby', 'guideConflicts', 'done', 'remember', 'worth']) delete (data as any)[k];
       // The answer settled the player's area, which has no "Worth getting here" yet: its ticket.
       if (data.worth && typeof data.worth === 'object') setTimeout(() => redeemWorthRef.current(data.worth), 0);
 
@@ -3209,6 +3293,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         role: 'assistant',
         text: finalAiText,
         modelUsed: data.modelUsed || 'Gemini 3.8 Flash',
+        ...(aside ? { aside: aside.name } : {}),
         bannerImageUrl: data.bannerImageUrl,
         // A guest's last question today: the sign-in card shows under this answer.
         ...(data.signInNudge === true ? { signInNudge: true } : {}),
@@ -3312,8 +3397,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       // stand-in text, so the server takes the topic from what the answer is about.
       if (text && aiMessage.text && !limitText) {
         const shotOnly = !!audioBase64 || (!!imageBase64 && (text === tr('chat.defaultShotQ') || text === tr('chat.defaultQ')));
-        void fetchVisual(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly);
-        void fetchDrawn(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly, imageBase64 || undefined, settings.showPointersOnScreen !== false, (aiMessage.points || []).map((p) => p.label || ''));
+        void fetchVisual(aiMessage.id, text, aiMessage.text, aside ? aside.name : activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly);
+        if (!aside) void fetchDrawn(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly, imageBase64 || undefined, settings.showPointersOnScreen !== false, (aiMessage.points || []).map((p) => p.label || ''));
       }
 
       const readArea: string = data.placeRead && typeof data.placeRead.area === 'string' ? data.placeRead.area.trim().slice(0, 80) : '';
@@ -3386,6 +3471,22 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         });
         return nextTabs;
       });
+      // A side question, answered: filed in its game's compendium (as that game's own conversation from now on), and
+      // this one keeps one line, "Answered in X →", so the player can find it. The pop-up card still shows it.
+      if (aside) {
+        const ids = new Set([userMessage.id, aiMessage.id]);
+        setTabs((prev) => {
+          const from = prev.find((t) => t.id === activeTab.id);
+          const moved = (from?.messages || []).filter((m) => ids.has(m.id)).map(({ aside: _a, ...m }) => m as ChatMessage);
+          if (!moved.length || !prev.some((t) => t.id === aside.tabId)) return prev;
+          const stub: ChatMessage = { id: `msg-${nowAi + 2}`, role: 'assistant', text: '', timestamp: nowAi, asideMoved: { name: aside.name, tabId: aside.tabId } };
+          return prev.map((t) =>
+            t.id === aside.tabId ? { ...t, messages: [...t.messages, ...moved], lastActive: nowAi }
+            : t.id === activeTab.id ? { ...t, messages: [...t.messages.filter((m) => !ids.has(m.id)), stub] }
+            : t,
+          );
+        });
+      }
       // The question said steps of the objective are done: they're ticked, and the log says so with Undo.
       {
         const objId = activeTab.questLog?.now;
@@ -3482,7 +3583,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     setIsRenameModalOpen(false);
   };
 
-  const handleCreateTab = (name: string, steamGame?: SteamGameData, guideKey?: string) => {
+  const handleCreateTab = (name: string, steamGame?: SteamGameData, guideKey?: string): string => {
     const newId = `tab-${Date.now()}`;
     const newTab: GameTab = {
       id: newId,
@@ -3505,6 +3606,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
 
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newId);
+    return newId;
   };
 
   const handleRenameTab = (tabId: string, newName: string) => {
@@ -3846,7 +3948,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 ) : undefined}
               />
             )}
-            {((detection.running && (!detection.open || detection.choose || detection.switched)) || (!detection.running && detection.confirm)) && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} extra={subscribeBtn} />}
+            {((detection.running && (!detection.open || detection.choose || detection.switched || detection.created)) || (!detection.running && detection.confirm)) && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} extra={subscribeBtn} />}
             <MigrationNotice
               spaces={spaces}
               soundEnabled={settings.soundEnabled}
@@ -4053,6 +4155,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                   setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));
                   rememberGameProgress(activeTab, next);
                 }}
+                onOpenTab={(tabId) => handleSelectTab(tabId)}
                 onUpdateMessage={(msgId, patch) =>
                   setTabs((prev) =>
                     prev.map((t) =>

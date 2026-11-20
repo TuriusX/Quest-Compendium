@@ -24,6 +24,8 @@ export interface Detection {
   offer?: { onOpen: () => void; onDismiss: () => void };
   /** A game started and its compendium was opened for it: "Switched to <the compendium's name>", for a few seconds. */
   switched?: string;
+  /** A game started with no compendium and one was opened for it (Nov 19 2026): "Opened a tab for X · Undo", a few seconds. */
+  created?: { name: string; onUndo: () => void };
 }
 
 /**
@@ -107,6 +109,17 @@ export function DetectionLine({ d, soundEnabled = true, extra }: { d: Detection;
   if (!d.running && d.confirm) return <ConfirmProgram key={d.confirm.via + (d.confirm.guess || '')} c={d.confirm} soundEnabled={soundEnabled} />;
   const name = displayGameName(d.running);
   if (d.running && d.offer && !d.open) return <OfferTab key={name} name={name} o={d.offer} soundEnabled={soundEnabled} />;
+  if (d.running && d.created && d.open && !d.choose) {
+    return (
+      <div role="status" data-qc-created className="h-7 flex-shrink-0 flex items-center gap-2 px-3 border-b border-white/[0.06] text-[12px] bg-emerald-500/[0.12] text-emerald-100" style={{ WebkitAppRegion: 'no-drag' } as any}>
+        <span className="text-emerald-400 text-[11px]" aria-hidden="true">✓</span>
+        <span className="truncate min-w-0">{t('detect.created', { game: displayGameName(d.created.name) })}</span>
+        <button type="button" onClick={() => { playBlipSound(soundEnabled); d.created!.onUndo(); }} className="ml-auto flex-shrink-0 h-5 px-2 rounded-md font-bold text-[11px] cursor-pointer whitespace-nowrap text-emerald-200/80 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+          {t('detect.undo')}
+        </button>
+      </div>
+    );
+  }
   if (d.running && d.switched && d.open && !d.choose) {
     return (
       <div role="status" data-qc-switched className="h-7 flex-shrink-0 flex items-center gap-2 px-3 border-b border-white/[0.06] text-[12px] bg-emerald-500/[0.12] text-emerald-100 " style={{ WebkitAppRegion: 'no-drag' } as any}>

@@ -130,6 +130,8 @@ interface ChatAreaProps {
   onSetStory?: (story: string) => void;
   /** Update fields of one message (e.g. which markers were checked off). */
   onUpdateMessage?: (msgId: string, patch: Partial<ChatMessage>) => void;
+  /** A side question filed in its game's compendium: "Answered in X →" opens it (Nov 19 2026). */
+  onOpenTab?: (tabId: string) => void;
   activeTab: GameTab | null;
   onSendMessage: (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash', quick?: QuickId) => Promise<void>;
   isLoading: boolean;
@@ -265,6 +267,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   steamName,
   steamAvatar,
   onUpdateMessage,
+  onOpenTab,
   markerLifetime,
   onChangeMarkerLifetime,
   hintMode = false,
@@ -1734,6 +1737,24 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               );
             };
 
+            // A side question filed in its game's compendium (Nov 19 2026): one quiet line here.
+            if (msg.asideMoved) {
+              const am = msg.asideMoved;
+              return (
+                <div key={msg.id} data-msg-id={msg.id} className="flex justify-center max-w-full">
+                  <button
+                    type="button"
+                    onClick={() => onOpenTab?.(am.tabId)}
+                    className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full border border-white/10 bg-white/[0.03] text-[11.5px] text-zinc-400 hover:text-white hover:border-white/25 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+                  >
+                    <span aria-hidden="true">↗</span>
+                    <span>{t('aside.answeredIn', { game: am.name })}</span>
+                    <span className="text-[var(--accent-color)] font-semibold">{t('aside.open')} →</span>
+                  </button>
+                </div>
+              );
+            }
+
             return (
               <div
                 key={msg.id}
@@ -1744,6 +1765,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               >
                 {/* User or AI Message Header Tag */}
                 <div className={`flex items-center gap-2 mb-1 text-[11px] font-mono ${isUser ? 'text-zinc-400 justify-end' : 'text-zinc-400'}`}>
+                  {msg.aside && (
+                    <span className="px-1.5 py-px rounded-full border border-[var(--accent-color)]/40 text-[var(--accent-color)] font-sans font-semibold text-[10.5px]">
+                      {t('aside.about', { game: msg.aside })}
+                    </span>
+                  )}
                   {isUser ? (
                     <>
                       <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>

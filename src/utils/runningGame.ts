@@ -41,20 +41,32 @@ export const runningId = (game: SteamGameData | null | undefined): string | null
  * game launches) doesn't.
  */
 export type FollowState = { id: string | null; goneAt: number };
-export type FollowAction = { kind: 'none' } | { kind: 'switch'; tabId: string } | { kind: 'offer' };
+export type FollowAction = { kind: 'none' } | { kind: 'switch'; tabId: string; quiet?: boolean } | { kind: 'offer' } | { kind: 'create' };
 export const RESTART_GAP_MS = 60_000;
 
+/**
+ * Made seamless (owner, Nov 19 2026: "automatically switch to the tab of the game that is detected"):
+ *   - a game with no compendium gets one opened for it ("Opened a tab for X · Undo"), unless the player undid that for
+ *     this game before (declined); with automatic switching off it's only offered, as before
+ *   - another compendium open while the game runs (picked by hand): readable while the panel is in front; once the
+ *     player is back in the game (away: the panel hidden or the game focused) the game's compendium is open again
+ */
 export function followRunning(
   state: FollowState,
   id: string | null,
   now: number,
-  o: { matchTabId: string | null; activeTabId: string | null; auto: boolean },
+  o: { matchTabId: string | null; activeTabId: string | null; auto: boolean; away?: boolean; declined?: boolean },
 ): { state: FollowState; action: FollowAction } {
   if (!id) return { state: { id: state.id, goneAt: state.goneAt || now }, action: { kind: 'none' } };
   const restarted = !!state.goneAt && now - state.goneAt >= RESTART_GAP_MS;
+  const started = id !== state.id || restarted;
   const next = { id, goneAt: 0 };
-  if (id === state.id && !restarted) return { state: next, action: { kind: 'none' } };
-  if (!o.matchTabId) return { state: next, action: { kind: 'offer' } };
+  if (!o.matchTabId) {
+    if (!started) return { state: next, action: { kind: 'none' } };
+    return { state: next, action: o.auto && !o.declined ? { kind: 'create' } : { kind: 'offer' } };
+  }
   if (o.matchTabId === o.activeTabId || !o.auto) return { state: next, action: { kind: 'none' } };
-  return { state: next, action: { kind: 'switch', tabId: o.matchTabId } };
+  if (started) return { state: next, action: { kind: 'switch', tabId: o.matchTabId } };
+  if (o.away) return { state: next, action: { kind: 'switch', tabId: o.matchTabId, quiet: true } };
+  return { state: next, action: { kind: 'none' } };
 }

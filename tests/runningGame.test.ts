@@ -34,7 +34,7 @@ test("an emulated game (no Steam app) matches its compendium by name", () => {
   assert.equal(runningId(BG3), "steam:1086940");
 });
 
-test("following the running game: switch when it starts, offer when there's no compendium, never back after a hand pick", () => {
+test("following the running game: switch when it starts, a tab opened when there is none, a hand pick kept while the panel is in front", () => {
   const o = (matchTabId: string | null, activeTabId: string, auto = true) => ({ matchTabId, activeTabId, auto });
   let r = followRunning({ id: null, goneAt: 0 }, "steam:1", 0, o("bg3", "notes"));
   assert.deepEqual(r.action, { kind: "switch", tabId: "bg3" });
@@ -45,9 +45,9 @@ test("following the running game: switch when it starts, offer when there's no c
   r = followRunning(r.state, null, 10000, o(null, "notes"));
   r = followRunning(r.state, "steam:1", 12000, o("bg3", "notes"));
   assert.deepEqual(r.action, { kind: "none" });
-  // A different game with no compendium: offered, not made.
+  // A different game with no compendium: one is opened for it (Nov 19 2026).
   r = followRunning(r.state, "name:supermetroid", 20000, o(null, "notes"));
-  assert.deepEqual(r.action, { kind: "offer" });
+  assert.deepEqual(r.action, { kind: "create" });
   // Back to the first game: switched again.
   r = followRunning(r.state, "steam:1", 30000, o("bg3", "notes"));
   assert.deepEqual(r.action, { kind: "switch", tabId: "bg3" });
@@ -62,6 +62,19 @@ test("automatic switching off: nothing switches (the detection line's Switch sta
   assert.deepEqual(followRunning(st, "steam:1", 0, { matchTabId: "bg3", activeTabId: "x", auto: false }).action, { kind: "none" });
   assert.deepEqual(followRunning(st, "steam:1", 0, { matchTabId: null, activeTabId: "x", auto: false }).action, { kind: "offer" });
   assert.deepEqual(followRunning(st, "steam:1", 0, { matchTabId: "x", activeTabId: "x", auto: true }).action, { kind: "none" }, "already there");
+});
+
+test("seamless (Nov 19 2026): back in the game, the game's compendium is open again; undone tabs aren't made again", () => {
+  const st = { id: "steam:1", goneAt: 0 };
+  // A hand pick while the panel is in front stays; once the player is back in the game, quietly back.
+  assert.deepEqual(followRunning(st, "steam:1", 5, { matchTabId: "bg3", activeTabId: "x", auto: true, away: false }).action, { kind: "none" });
+  assert.deepEqual(followRunning(st, "steam:1", 5, { matchTabId: "bg3", activeTabId: "x", auto: true, away: true }).action, { kind: "switch", tabId: "bg3", quiet: true });
+  // Switching off: never.
+  assert.deepEqual(followRunning(st, "steam:1", 5, { matchTabId: "bg3", activeTabId: "x", auto: false, away: true }).action, { kind: "none" });
+  // A game whose opened tab the player undid: only offered after that.
+  assert.deepEqual(followRunning({ id: null, goneAt: 0 }, "steam:2", 5, { matchTabId: null, activeTabId: "x", auto: true, declined: true }).action, { kind: "offer" });
+  // No compendium and the same game still running: nothing more (no tab made twice).
+  assert.deepEqual(followRunning({ id: "steam:2", goneAt: 0 }, "steam:2", 5, { matchTabId: null, activeTabId: "x", auto: true, away: true }).action, { kind: "none" });
 });
 
 console.log(`\n${passed} passed`);

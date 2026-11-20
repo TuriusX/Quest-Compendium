@@ -89,6 +89,10 @@ export interface ChatMessage {
   /** A free player's limit message: the Premium card under it (PremiumCard), never a pop-up. */
   premiumNudge?: boolean;
   role: 'user' | 'assistant' | 'system';
+  /** A side question (Nov 19 2026, utils/asideGame.ts): about another game, named; kept out of this game's history and memory. */
+  aside?: string;
+  /** A side question moved into its game's compendium: this line is left behind ("Answered in X →"). */
+  asideMoved?: { name: string; tabId: string };
   text: string;
   timestamp: number;
   /** A "Spot it" result (roadmap item 7), not an answer: its 👍 / 👎 are counted on their own. */
@@ -408,6 +412,8 @@ export interface AppSettings {
   hintMode?: boolean;
   /** Desktop: switch to the running game's tab when a game starts (on by default; utils/runningGame.ts followRunning). */
   autoSwitchGames?: boolean;
+  /** Games (runningId) whose automatically opened tab the player undid: offered after that, never opened again (Nov 19 2026). */
+  noAutoTab?: string[];
   /** Where the player is in each game (keyed by game name, lowercase), so a new compendium starts from it. */
   gameProgress?: Record<string, { name: string; confirmed: boolean; story?: string; storyConfirmed?: boolean }>;
   /** Per game (same key as gameProgress): what the player has already done, most recent first (utils/progressMemory). */
