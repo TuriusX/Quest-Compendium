@@ -289,7 +289,8 @@ let isAppVisible = true;
 let controllerService = null;
 let sonyPads = null; // PlayStation controllers read directly (sonyPads.cjs)
 let quickWheel = null; // the quick menu over the game (wheel.cjs)
-let answerCard = null; // the answer card over the game (answerCard.cjs)
+let answerCard = null; // the answer card over the game (answerCard.cjs), and the orb while the panel is away
+let quickMenuKeysNow = ''; // the quick menu's keyboard shortcut, registered ('' = none): the orb's how-to-ask line names it
 // When something was asked from the quick menu with the panel away: its answer goes on the answer card, and nothing
 // brings the panel in or takes focus from the game (owner, Nov 17 2026).
 let quietAskAt = 0;
@@ -418,6 +419,7 @@ async function slideIn(opts = {}) {
   lastSlideInAt = Date.now();
   isAppVisible = true;
   spine.hide();
+  if (answerCard) answerCard.setAway(false); // the orb goes with the spine
   // The window the player was in (the game), recorded before show()/focus() hand focus to the panel: by the time
   // take() looks, the panel usually has it already, so take() alone can't say where to give focus back on hide.
   const focusedBefore = focusHelper.other();
@@ -459,7 +461,19 @@ function panelRect() {
 function parkPanel() {
   if (isAppVisible || !mainWindow || mainWindow.isDestroyed() || currentDockPosition === 'undocked') return;
   mainWindow.hide();
-  spine.show();
+  showAway();
+}
+
+/**
+ * The panel is away: the orb in the pop-up card's corner (answerCard.cjs; owner, Nov 19 2026: in place of the side tab
+ * at the screen edge), or with the orb off in Settings, the book spine as before.
+ */
+function showAway() {
+  if (answerCard) answerCard.setAway(true);
+  if (answerCard && answerCard.orbOn()) {
+    spine.hide();
+    tracker.anchorChanged(); // an attached log's heads-ups go beside the orb
+  } else spine.show();
 }
 
 function slideOut() {
@@ -493,7 +507,7 @@ function slideOut() {
       giveBack();
       if (!isAppVisible) mainWindow.hide();
       mainWindow.setOpacity(1);
-      if (!isAppVisible) spine.show();
+      if (!isAppVisible) showAway();
     });
   }
   // The quest log stays as it is; one that stepped off the panel goes back to its own spot.
@@ -725,7 +739,9 @@ app.whenReady().then(() => {
     // Attached quest log: which side of the panel it goes on.
     getDock: () => currentDockPosition,
     // With the panel away: the spine the attached log (or its bookmark) sticks out of.
-    getSpineAnchor: () => spine.anchor(),
+    getSpineAnchor: () => spine.anchor() || (answerCard && answerCard.anchor()),
+    // The orb on: no ribbon at the screen edge for a popped-out log that's put away.
+    hideRibbon: () => !!answerCard && answerCard.orbOn(),
     // A new tracker opens on the game's screen: the one the last screenshot came from.
     getDisplay: () => lastCaptureDisplay,
     // Processor share while it's open, next to the markers' (startPerfLog).
@@ -756,6 +772,8 @@ app.whenReady().then(() => {
     if (JSON.stringify(next) === JSON.stringify(appLook)) return;
     appLook = next;
     spine.refresh();
+    // The orb and the card take the theme's colour too (owner, Nov 19 2026: a green theme, a green orb).
+    if (answerCard) answerCard.restyle();
   });
   spine.init({
     ipcMain, screen,
@@ -793,7 +811,9 @@ app.whenReady().then(() => {
       const s = (quickWheel && quickWheel.strings()) || {};
       const card = s.card || {};
       // The keyboard hint names the player's own show / hide shortcut.
-      return { ...card, keysOpen: String(card.keysOpen || '').replace('{keys}', hideKeysNow ? formatAccelerator(hideKeysNow) : 'Ctrl+Space'), accent: s.accent };
+      // The theme's colour: the app's look (set-look, sent when the theme changes), else the quick menu's.
+      // The orb's how-to-ask line names the quick menu's keys (none: the controller's combo only).
+      return { ...card, keysOpen: String(card.keysOpen || '').replace('{keys}', hideKeysNow ? formatAccelerator(hideKeysNow) : 'Ctrl+Space'), askKeys: quickMenuKeysNow ? formatAccelerator(quickMenuKeysNow) : '', accent: (appLook && appLook.accent) || s.accent };
     },
     onAction: (what, a) => {
       if (what === 'open') openAnswerInPanel(a);
@@ -803,6 +823,12 @@ app.whenReady().then(() => {
     // The summary read aloud by the app (its voice setting), or stopped (null); the speaker button's choice is kept.
     onSpeak: (s) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('card-speak', s); },
     onSpeakPref: (on) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('card-speak-pref', !!on); },
+    // The orb's menu (owner, Nov 19 2026): the panel, the quest log (as its shortcut does), the quick menu (as Alt+Q).
+    onOrb: (what) => {
+      if (what === 'open') { if (!isAppVisible) slideIn(); return; }
+      if (what === 'log') return void tracker.toggle(null).then((r) => { if (r === 'empty' && !isAppVisible) slideIn(); }).catch(() => {});
+      if (what === 'ask') toggleQuickMenu('keys', '');
+    },
   });
   // Asked over the game (the quick menu, or a keyboard shortcut with the panel away): the card shows the question,
   // thinking, and the answer lands there; the panel never comes in by itself (owner, Nov 17-18 2026).
@@ -840,6 +866,11 @@ app.whenReady().then(() => {
       // More of the answer on the card, right there (the game gets its focus back as the menu closes).
       if (key === 'more') {
         answerCard.more();
+        return void quickWheel.close();
+      }
+      // The last card back on the card (the orb's left click, for pads).
+      if (key === 'last') {
+        answerCard.recall();
         return void quickWheel.close();
       }
       // A hint's next level ("More of a hint", "Show the answer"), on the card.
@@ -941,13 +972,15 @@ app.whenReady().then(() => {
         const s = quickWheel.strings() || {};
         let items = quickWheel.items();
         if (isAppVisible) items = items.map((i) => (i.key === 'panel' ? { key: 'back', label: s.backToGame || i.label } : i));
-        else if (answerCard.recent()) {
+        else if (answerCard.recent() || (answerCard.orbOn() && answerCard.hasLast())) {
           // An answer on the card: More of it first (while there's more), then Open in the panel.
           const extra = [];
           // A hint on the card: its next level first (it's what the player asked hints for).
           if (answerCard.hintNext()) extra.push({ key: 'hint', label: answerCard.hintNext() });
           if (answerCard.canMore() && s.moreAnswer) extra.push({ key: 'more', label: s.moreAnswer });
-          if (s.openAnswer) extra.push({ key: 'answer', label: s.openAnswer });
+          // The orb on: the last card back over the game (owner, Nov 19 2026: pads have no right click or orb to click).
+          if (answerCard.orbOn() && answerCard.hasLast() && !answerCard.isShowing() && s.lastCard) extra.push({ key: 'last', label: s.lastCard });
+          if (s.openAnswer && answerCard.recent()) extra.push({ key: 'answer', label: s.openAnswer });
           items = [...extra, ...items];
         }
         // The card stays where it is (it's in a corner); its time stops while the menu is open.
@@ -969,6 +1002,7 @@ app.whenReady().then(() => {
   const registerQuickMenuShortcut = (keys) => {
     let ok = false;
     try { ok = globalShortcut.register(keys, () => toggleQuickMenu('keys', keys)); } catch (err) { console.error(`[wheel] couldn't register ${keys}:`, err && err.message); }
+    quickMenuKeysNow = ok ? keys : '';
     if (!ok) console.warn(`[wheel] ${keys} is taken (by another app or shortcut); the quick menu shortcut isn't set`);
     return ok;
   };
@@ -1015,6 +1049,7 @@ app.whenReady().then(() => {
     console.log(`[panel] show/hide shortcut: ${hideKeys || `none (${hideAppCmd} and Ctrl+Space are taken)`}`);
     
     // The quick menu from the keyboard (Settings: quickMenuShortcut, default Alt+Q; "off" for none).
+    quickMenuKeysNow = '';
     if (shortcuts.quickMenuShortcut !== 'off') registerQuickMenuShortcut(shortcuts.quickMenuShortcut || 'Alt+Q');
 
     const voiceCmd = shortcuts.voiceInputShortcut || 'CommandOrControl+Shift+V';
@@ -1563,7 +1598,7 @@ ipcMain.on('set-dock-position', (event, pos) => {
     } else {
       const coords = getDockCoords(!isAppVisible);
       animateWindow(coords.x, coords.y, 150).then(() => { if (isAppVisible) tracker.panelShown(); });
-      if (!isAppVisible) spine.show(); // the spine moves to the new dock edge
+      if (!isAppVisible) showAway(); // the spine moves to the new dock edge
     }
   }
 });
@@ -1644,7 +1679,16 @@ ipcMain.on('card-stage', (event, s) => {
   answerCard.stage(s);
 });
 // Settings: the pop-up's size and corner.
-ipcMain.on('set-card-prefs', (event, p) => { if (answerCard) answerCard.setPrefs(p || {}); });
+ipcMain.on('set-card-prefs', (event, p) => {
+  if (!answerCard) return;
+  const orbWas = answerCard.orbOn();
+  answerCard.setPrefs(p || {});
+  // The orb turned on or off with the panel away: it and the spine (and the quest log's ribbon) swap places.
+  if (answerCard.orbOn() !== orbWas) {
+    if (!isAppVisible) showAway();
+    tracker.anchorChanged();
+  }
+});
 ipcMain.on('card-speaking', (event, on) => { if (answerCard) answerCard.speaking(!!on); });
 
 ipcMain.on('toggle-slide', () => {
