@@ -41,6 +41,8 @@ async function main() {
       const order: { slug: string; name: string }[] = info?.areas || [];
       const a: any = order.some((o) => o.slug === slug) ? (await db().collection('guides').doc(key).collection('areas').doc(slug).get()).data() : null;
       if (!a || a.status === 'held' || a.status === 'draft') continue;
+      // Rebuilt in the last day (an earlier run of this, stopped by the job's 3-hour limit): passed over.
+      if (Number(a.flagship?.at) > Date.now() - 20 * 3_600_000) continue;
       n++;
       if (dry) { console.log(`  would rebuild ${id}`); continue; }
       if (ledgerDollars() + PAGE_WORST > max) { lines.push(`stopped at $${ledgerDollars().toFixed(2)} (the next page could pass $${max})`); break; }
