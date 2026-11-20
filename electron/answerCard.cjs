@@ -11,20 +11,40 @@
  *   update(payload)   the same answer with its picture, arrived later
  *   more()   the rest of the answer in place, then its next part (the quick menu's "More of this answer")
  *   pause() / resume()   while the quick menu is open, or the mouse is over the card
- *   setPrefs({ size, corner, speak })   Settings: Small / Medium / Large, the corner, and reading the summary aloud
+ *   setPrefs({ size, corner, speak, orb })   Settings: Small / Medium / Large, the corner, reading the summary aloud, the orb
  *   speaking(on)   the summary is being read aloud: the card stays until it's done
  *
  * Summaries (owner, Nov 19 2026: quick information to get on with what led to the question): an answer with a summary
  * (src/utils/cardSummary.ts; its own call after the answer, so the answer never changes) shows the summary, its warnings and its picture; More shows the whole answer. The summary
  * is read aloud (opts.onSpeak) unless the card's speaker button or Settings turned that off (opts.onSpeakPref).
+ *
+ * The orb (owner, Nov 19 2026: "a glowing orb floating there that contorts itself into a card and then back up to the
+ * orb again"; Settings → Pop-up answers, on by default): while the panel is away (setAway), this window stays over the
+ * game and shows a clear glass orb in the theme's colour (nothing inside: owner, Nov 19 2026) in the card's corner, in place of the book spine and the quest log's
+ * ribbon at the screen edge. Cards grow out of it and fold back into it (answerCard.html draws both, the orb in WebGL).
+ * A left click brings the last card back (never read aloud; with none yet, a line on how to ask); a right click opens
+ * its menu (Open Quest Compendium, Quest log, Ask a question, Mute read-aloud, Hide until next answer: opts.onOrb). A
+ * card whose time ran out leaves a dot on the orb. The state is electron/orbState.cjs.
+ *   Why one window: the orb and the card are the same thing on screen (the card is the orb, opened), so the morph is
+ * one page animating one shape, with nothing to line up between windows. While the orb is on, the window keeps the
+ * card's full size in its corner (no resizing mid-morph: a transparent window being resized flickers). The orb off: the
+ * card works as before.
+ *   The mouse (both ways, Nov 19 2026): the window is click-through without forwarding, and the main process hit-tests
+ * the cursor against the parts the page reports (the orb, the card, the menu) every 40 ms, letting the mouse in only
+ * over them, as the quest log does (tracker.cjs). The card used to let itself in from the page's mouseenter, which on
+ * Windows flips straight back (setIgnoreMouseEvents(false) fires a mouseleave): its buttons' clicks went to the game.
  */
 const { BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const orbState = require('./orbState.cjs');
 
 const WIDTH = 520; // at Medium, on a 1080p screen
 const SCALE = { s: 0.85, m: 1, l: 1.3 };
 const MARGIN = 24;
 const THINKING_MS = 120000; // a question that never got an answer goes after this
+const HINT_MS = 7000; // the orb's how-to-ask line
+const FOLD_MS = 520; // the card folding back into the orb (the page's animation, and a little more)
+const MENU_LEAVE_MS = 1400; // the orb's menu closes once the mouse has been away from it this long
 
 /** How long an answer stays: reading time for what's showing (20 s + 1 s per 15 words), at most 90 s; a warning, 30 s at least. */
 function readingMs(text, hasWarning) {
@@ -40,7 +60,8 @@ const pictureOf = (p) => (p && typeof p.url === 'string' && p.url
 
 /**
  * @param {{ display: () => Electron.Display, strings: () => object, onAction: (what: string, current: object|null) => void,
- *   onSpeak?: (s: { id: string, text: string } | null) => void, onSpeakPref?: (on: boolean) => void }} opts
+ *   onSpeak?: (s: { id: string, text: string } | null) => void, onSpeakPref?: (on: boolean) => void,
+ *   onOrb?: (what: 'open'|'log'|'ask') => void }} opts
  * onSpeak(null) stops the reading.
  */
 function createAnswerCard(opts) {
@@ -49,9 +70,11 @@ function createAnswerCard(opts) {
   let queue = [];
   let timer = null;
   let current = null; // the answer on the card (or put away), for "Open this answer"
+  let last = null; // the last answer the card showed: the orb's left click (and the quick menu's "Last card") brings it back
   let thinkingNow = null;
   let shownAt = 0;
-  let prefs = { size: 'm', corner: 'tr', speak: true };
+  let prefs = { size: 'm', corner: 'tr', speak: true, orb: true };
+  let orb = orbState.createOrbState();
   let speakingNow = false; // the summary is being read aloud (the timer waits)
   let height = 200;
   let moreState = { more: false, part: 0, parts: 0 };
@@ -59,6 +82,13 @@ function createAnswerCard(opts) {
   let endsAt = 0;
   let pausedLeft = 0;
   let mouseOver = false;
+  // The orb's mouse: the parts of the page the mouse may reach ({ id, x, y, w, h }, window coordinates), what it's over
+  // now, whether the window takes the mouse (null: unknown, right after a show), and when it last was over the menu.
+  let hits = [];
+  let overId = '';
+  let mouseIn = null;
+  let watch = null;
+  let menuSeenAt = 0;
 
   const scale = () => SCALE[prefs.size] || 1;
   const width = () => Math.round(WIDTH * scale());
@@ -66,16 +96,17 @@ function createAnswerCard(opts) {
     const d = opts.display();
     return Math.round((d.workArea || d.bounds).height * 0.6);
   };
+  const alive = () => !!win && !win.isDestroyed();
 
   const send = (channel, payload) => {
     if (channel === 'card-show') ensure(); // the first message makes the window (it waits for the page to load)
-    if (!win || win.isDestroyed()) return;
+    if (!alive()) return;
     if (!ready) queue.push([channel, payload]);
     else win.webContents.send(channel, payload);
   };
 
   function ensure() {
-    if (win && !win.isDestroyed()) return win;
+    if (alive()) return win;
     ready = false;
     win = new BrowserWindow({
       width: width(),
@@ -93,32 +124,137 @@ function createAnswerCard(opts) {
       webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false, preload: path.join(__dirname, 'answerCardPreload.cjs') },
     });
     win.setAlwaysOnTop(true, 'screen-saver');
-    // Clicks go through to the game (except over the card itself, see 'card-mouse'); never in the app's own screenshots.
-    win.setIgnoreMouseEvents(true, { forward: true });
+    // Clicks go through to the game (except over the card, the orb or its menu: see the watch); never in the app's own
+    // screenshots.
+    applyMouseMode();
     win.setContentProtection(true);
+    const w = win;
     win.webContents.once('did-finish-load', () => {
+      if (win !== w) return; // dropped meanwhile
       ready = true;
-      for (const [c, p] of queue) win.webContents.send(c, p);
+      w.webContents.send('orb-state', orbLook());
+      for (const [c, p] of queue) w.webContents.send(c, p);
       queue = [];
     });
     win.loadFile(path.join(__dirname, 'answerCard.html'));
     win.on('closed', () => {
+      if (win !== w) return; // dropped on purpose (drop() has cleaned up)
       win = null;
       ready = false;
+      stopWatch();
     });
     return win;
   }
 
-  /** The card's corner of the game's screen, at the card's height. */
+  /**
+   * Gone until it's needed again: closed, not hidden. A window hidden and shown again loses the button-down of every
+   * later click (the quest log found the same: tracker.cjs), so the card's buttons and the orb would stop working; a
+   * fresh window each time doesn't.
+   */
+  function drop() {
+    if (!alive()) return;
+    const w = win;
+    win = null;
+    ready = false;
+    queue = [];
+    hits = [];
+    stopWatch();
+    mouseOver = false;
+    w.destroy();
+  }
+
+  /** The card's corner of the game's screen: at the card's height, or with the orb on, the card's full room. */
   function place() {
-    if (!win || win.isDestroyed()) return;
+    if (!alive()) return;
     const d = opts.display();
     const { x, y, width: W, height: H } = d.workArea || d.bounds;
     const w = width();
-    const h = Math.max(60, Math.min(maxHeight(), height));
+    const h = orb.on ? maxHeight() : Math.max(60, Math.min(maxHeight(), height));
     const right = prefs.corner === 'tr' || prefs.corner === 'br';
     const bottom = prefs.corner === 'bl' || prefs.corner === 'br';
-    win.setBounds({ x: Math.round(right ? x + W - w - MARGIN : x + MARGIN), y: Math.round(bottom ? y + H - h - MARGIN : y + MARGIN), width: w, height: h });
+    const next = { x: Math.round(right ? x + W - w - MARGIN : x + MARGIN), y: Math.round(bottom ? y + H - h - MARGIN : y + MARGIN), width: w, height: h };
+    const b = win.getBounds();
+    if (b.x !== next.x || b.y !== next.y || b.width !== next.width || b.height !== next.height) win.setBounds(next);
+  }
+
+  // ---- The orb ----------------------------------------------------------------------------------------------------
+  // home: where a card grows from and folds back to (the orb on and the panel away, even while hidden until next answer).
+  const orbLook = () => ({
+    ...orbState.look(orb), on: orb.on, home: orb.on && orb.away, geo: orbState.orbGeometry(scale()), speak: prefs.speak,
+    scale: scale(), right: prefs.corner === 'tr' || prefs.corner === 'br', bottom: prefs.corner === 'bl' || prefs.corner === 'br', strings: opts.strings(),
+  });
+
+  /** Click-through, without forwarding: the watch lets the mouse in over the page's parts. */
+  function applyMouseMode() {
+    if (!alive()) return;
+    mouseIn = null;
+    win.setIgnoreMouseEvents(true);
+  }
+  function setMouseIn(on) {
+    if (!alive() || mouseIn === on) return;
+    mouseIn = on;
+    if (on) win.setIgnoreMouseEvents(false);
+    else win.setIgnoreMouseEvents(true);
+  }
+  function startWatch() {
+    if (watch) return;
+    watch = setInterval(() => {
+      if (!alive() || !win.isVisible()) return void over('');
+      const p = require('electron').screen.getCursorScreenPoint();
+      const b = win.getBounds();
+      const x = p.x - b.x, y = p.y - b.y;
+      const hit = hits.find((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+      over(hit ? hit.id : '');
+      // The menu has no focus to lose: it closes once the mouse has stayed away from it (and the orb) for a moment.
+      if (orb.menu) {
+        if (hit) menuSeenAt = Date.now();
+        else if (Date.now() - menuSeenAt > MENU_LEAVE_MS) dispatch({ type: 'menu', open: false });
+      }
+    }, 40);
+  }
+  function stopWatch() {
+    clearInterval(watch);
+    watch = null;
+    overId = '';
+    mouseIn = null;
+  }
+  /** The mouse is over a part of the page (or none): the window takes it there, the page lights it, the card's time waits. */
+  function over(id) {
+    setMouseIn(!!id);
+    if (id === overId) return;
+    overId = id;
+    send('orb-hover', id);
+    const onCard = id === 'card';
+    if (onCard !== mouseOver) {
+      mouseOver = onCard;
+      if (mouseOver) pause();
+      else resume();
+    }
+  }
+
+  /** The orb's state changed: the window shows or goes, and the page draws it. */
+  function dispatch(ev) {
+    const before = orbState.look(orb);
+    const prev = JSON.stringify(orb);
+    orb = orbState.reduce(orb, ev);
+    const now = orbState.look(orb);
+    if (ev.type === 'menu' && now.menu) menuSeenAt = Date.now();
+    if (orb.on && now.window) {
+      const w = ensure();
+      place();
+      if (!w.isVisible()) {
+        w.showInactive();
+        w.webContents.invalidate();
+        mouseIn = null; // Windows' click-through state after a hide/show isn't known: the watch applies it again
+      }
+      startWatch();
+    } else if (orb.on && before.window && !now.window && !shownAt) {
+      // Nothing to show (the panel came in, or Hide until next answer): after the fold, if one is running.
+      setTimeout(() => {
+        if (!shownAt && !orbState.look(orb).window) drop();
+      }, before.card ? FOLD_MS : 0);
+    }
+    if (prev !== JSON.stringify(orb) || ev.type === 'pref') send('orb-state', orbLook());
   }
 
   function startTimer(ms) {
@@ -126,43 +262,60 @@ function createAnswerCard(opts) {
     total = ms;
     endsAt = Date.now() + ms;
     pausedLeft = 0;
-    timer = setTimeout(hide, ms);
+    timer = setTimeout(() => hide('timer'), ms);
     send('card-timer', { left: ms, total: ms, paused: false });
   }
 
-  function showFor(ms) {
+  function showFor(ms, kind) {
     const w = ensure();
     place();
-    if (!w.isVisible()) w.showInactive();
+    if (!w.isVisible()) {
+      w.showInactive();
+      mouseIn = null;
+    }
     w.webContents.invalidate(); // a fresh frame for what's just been sent
+    startWatch();
     shownAt = Date.now();
     startTimer(ms);
+    dispatch({ type: 'show', kind });
   }
 
-  function hide() {
+  /** The card goes: it fades (the orb off) or folds back into the orb. reason: 'timer', 'close' or 'other'. */
+  function hide(reason = 'other') {
     if (speakingNow || (current && current.summary)) stopSpeaking();
     clearTimeout(timer);
     timer = null;
+    const wasShown = !!shownAt;
     shownAt = 0;
     thinkingNow = null;
     pausedLeft = 0;
     send('card-hide', {});
+    if (wasShown) dispatch({ type: 'fold', reason }); // (the orb off: only its state, nothing on screen)
+    if (orb.on) {
+      mouseOver = false;
+      return;
+    }
     // After the fade.
     setTimeout(() => {
-      if (win && !win.isDestroyed() && !shownAt) {
-        win.hide();
-        win.setIgnoreMouseEvents(true, { forward: true });
-        mouseOver = false;
-      }
+      if (!shownAt) drop();
     }, 260);
   }
 
-  const look = () => ({ strings: opts.strings(), scale: scale(), bottom: prefs.corner === 'bl' || prefs.corner === 'br', maxHeight: maxHeight(), speak: prefs.speak });
+  const look = () => ({ strings: opts.strings(), scale: scale(), bottom: prefs.corner === 'bl' || prefs.corner === 'br', right: prefs.corner === 'tr' || prefs.corner === 'br', maxHeight: maxHeight(), speak: prefs.speak, orb: orb.on });
 
   const speak = () => { if (current && current.summary && prefs.speak && opts.onSpeak) opts.onSpeak({ id: current.id, text: current.summary }); };
   function stopSpeaking() {
     if (opts.onSpeak) opts.onSpeak(null);
     if (speakingNow) { speakingNow = false; resume(); }
+  }
+  /** The card's speaker button and the orb's Mute read-aloud: reading the summary aloud off (it stops now) or on again. */
+  function toggleSpeak(readNow) {
+    prefs.speak = !prefs.speak;
+    if (opts.onSpeakPref) opts.onSpeakPref(prefs.speak);
+    if (prefs.speak) { if (readNow) speak(); }
+    else stopSpeaking();
+    if (current && shownAt) send('card-show', { ...current, ...look() });
+    send('orb-state', orbLook());
   }
 
   function pause() {
@@ -176,12 +329,32 @@ function createAnswerCard(opts) {
     const left = pausedLeft;
     pausedLeft = 0;
     endsAt = Date.now() + left;
-    timer = setTimeout(hide, left);
+    timer = setTimeout(() => hide('timer'), left);
     send('card-timer', { left, total, paused: false });
   }
 
+  /** The last answer back on the card (the orb's left click, the quick menu's "Last card"): never read aloud. */
+  function recall() {
+    if (!last) return false;
+    if (speakingNow) stopSpeaking();
+    thinkingNow = null;
+    current = { ...last, at: Date.now() };
+    moreState = { more: false, part: 0, parts: 0 };
+    const warns = current.steps.filter((s) => s.kind === 'warning');
+    showFor(readingMs(`${current.title} ${current.summary || current.text.split(/\s+/).slice(0, 120).join(' ')}`, warns.length > 0), 'answer');
+    send('card-show', { ...current, ...look() });
+    return true;
+  }
+  /** No answer yet: one line on how to ask (the quick menu's keys, the controller's combo). */
+  function hint() {
+    if (speakingNow) stopSpeaking();
+    thinkingNow = null;
+    showFor(HINT_MS, 'hint');
+    send('card-show', { state: 'hint', ...look() });
+  }
+
   // From the page: its height (the window follows), whether More has more, the mouse over it, its buttons.
-  const fromCard = (event) => !!win && !win.isDestroyed() && event.sender === win.webContents;
+  const fromCard = (event) => alive() && event.sender === win.webContents;
   ipcMain.on('card-size', (event, h) => {
     if (!fromCard(event)) return;
     height = Math.max(60, Math.round(Number(h) || 0) + 2);
@@ -191,27 +364,37 @@ function createAnswerCard(opts) {
     if (!fromCard(event)) return;
     moreState = { more: !!(s && s.more), part: Number(s && s.part) || 0, parts: Number(s && s.parts) || 0 };
   });
-  ipcMain.on('card-mouse', (event, over) => {
-    if (!fromCard(event)) return;
-    mouseOver = !!over;
-    // Over the card: its buttons get the clicks (still without taking focus); elsewhere they go to the game.
-    win.setIgnoreMouseEvents(!mouseOver, { forward: true });
-    if (mouseOver) pause();
-    else resume();
-  });
   ipcMain.on('card-action', (event, what) => {
     if (!fromCard(event)) return;
     if (what === 'close') return void api.hide();
     if (what === 'open') opts.onAction('open', current);
     if (what === 'hint' && current && current.hintNext) opts.onAction('hint', current);
     // The speaker button: reading the summary aloud off (it stops now) or on again (it reads this one).
-    if (what === 'speak') {
-      prefs.speak = !prefs.speak;
-      if (opts.onSpeakPref) opts.onSpeakPref(prefs.speak);
-      if (prefs.speak) speak();
-      else stopSpeaking();
-      if (current && shownAt) send('card-show', { ...current, ...look() });
+    if (what === 'speak') toggleSpeak(true);
+  });
+  // The orb's parts the mouse may reach (window coordinates), as the page lays them out.
+  ipcMain.on('orb-hits', (event, list) => {
+    if (!fromCard(event)) return;
+    hits = (Array.isArray(list) ? list : []).slice(0, 8).map((r) => ({
+      id: ['orb', 'card', 'menu'].includes(r && r.id) ? r.id : 'card',
+      x: Number(r.x) || 0, y: Number(r.y) || 0, w: Math.max(0, Number(r.w) || 0), h: Math.max(0, Number(r.h) || 0),
+    }));
+  });
+  ipcMain.on('orb-action', (event, what) => {
+    if (!fromCard(event) || !orb.on) return;
+    const l = orbState.look(orb);
+    if (what === 'click' && l.orb) {
+      if (orbState.clickAction(!!last) === 'recall') recall();
+      else hint();
+      return;
     }
+    if (what === 'menu') return void dispatch({ type: 'menu', open: !orb.menu });
+    if (what === 'menu-close') return void dispatch({ type: 'menu', open: false });
+    if (!l.menu) return;
+    dispatch({ type: 'menu', open: false });
+    if (what === 'mute') return void toggleSpeak(false);
+    if (what === 'hide') return void dispatch({ type: 'hide' });
+    if (['open', 'log', 'ask'].includes(what) && opts.onOrb) opts.onOrb(what);
   });
 
   const api = {
@@ -219,7 +402,7 @@ function createAnswerCard(opts) {
     thinking({ question, mode, place: where } = {}) {
       current = null;
       thinkingNow = { state: 'thinking', question: String(question || ''), mode: mode === 'pad' ? 'pad' : 'keys', place: String(where || '') };
-      showFor(THINKING_MS);
+      showFor(THINKING_MS, 'thinking');
       send('card-show', { ...thinkingNow, ...look() });
     },
     /** What's happening while it thinks: the screenshot it took, the question sent (with Pro or Fast). */
@@ -253,17 +436,18 @@ function createAnswerCard(opts) {
         summary: String(a.summary || '').slice(0, 320),
         at: Date.now(),
       };
+      last = current;
       moreState = { more: false, part: 0, parts: 0 };
       if (speakingNow) stopSpeaking();
       if (current.summary) {
         const warns = steps.filter((s) => s.kind === 'warning');
-        showFor(readingMs(`${current.title} ${current.summary} ${warns.map((s) => s.label).join(' ')}`, warns.length > 0));
+        showFor(readingMs(`${current.title} ${current.summary} ${warns.map((s) => s.label).join(' ')}`, warns.length > 0), 'answer');
         send('card-show', { ...current, ...look() });
         speak();
         return;
       }
       const shown = steps.length ? `${current.text.split(/\s+/).slice(0, 60).join(' ')} ${steps.map((s) => `${s.label} ${s.where}`).join(' ')}` : current.text.split(/\s+/).slice(0, 180).join(' ');
-      showFor(readingMs(`${current.title} ${shown}`, steps.some((s) => s.kind === 'warning')));
+      showFor(readingMs(`${current.title} ${shown}`, steps.some((s) => s.kind === 'warning')), 'answer');
       send('card-show', { ...current, ...look() });
     },
     /** The same answer, updated (its picture arrived later): the card redraws without restarting its time. */
@@ -277,6 +461,7 @@ function createAnswerCard(opts) {
         current.hintNext = String(a.hintNext || '').slice(0, 60);
         current.steps = (Array.isArray(a.steps) ? a.steps : []).slice(0, 8).map((s) => ({ kind: s.kind === 'warning' ? 'warning' : 'step', label: String(s.label || '').slice(0, 160), where: String(s.where || '').slice(0, 160) }));
         moreState = { more: false, part: 0, parts: 0 };
+        last = current;
         send('card-show', { ...current, ...look() });
         startTimer(readingMs(text.split(/\s+/).slice(0, 180).join(' '), false));
         return true;
@@ -285,6 +470,7 @@ function createAnswerCard(opts) {
       if (JSON.stringify(picture) !== JSON.stringify(current.picture)) {
         const newDrawing = !!(picture && picture.wide && !(current.picture && current.picture.wide));
         current.picture = picture;
+        last = current;
         send('card-show', { ...current, ...look() });
         // A drawing arrived (a few seconds after the answer): at least 25 s more to look at it, unless paused.
         if (newDrawing && !pausedLeft && endsAt - Date.now() < 25000) startTimer(25000);
@@ -295,7 +481,7 @@ function createAnswerCard(opts) {
     more() {
       if (!current) return;
       if (!shownAt) {
-        showFor(30000);
+        showFor(30000, 'answer');
         send('card-show', { ...current, ...look() });
       }
       send('card-more');
@@ -325,11 +511,11 @@ function createAnswerCard(opts) {
     },
     hide() {
       current = null;
-      hide();
+      hide('close');
     },
     /** Out of sight now; the answer stays for "Open this answer" a little longer. */
     putAway() {
-      if (shownAt) hide();
+      if (shownAt) hide('other');
     },
     /** Showing (thinking or an answer): answers that arrive now go on it. */
     isShowing: () => !!shownAt,
@@ -338,9 +524,54 @@ function createAnswerCard(opts) {
     recent() {
       return current && Date.now() - current.at < 120000 ? current : null;
     },
+    /** The last answer back on the card ("Last card" in the quick menu); false with none. */
+    recall,
+    /** There's a last answer to bring back (and it isn't on the card now). */
+    hasLast: () => !!last && !(shownAt && current && current.id === last.id),
+    /** The orb is on (Settings): it stands in for the book spine and the quest log's ribbon while the panel is away. */
+    orbOn: () => orb.on,
+    /** The panel went away (true) or came in (false): the orb shows only while it's away. */
+    setAway(away) {
+      if (!!away === orb.away) return;
+      dispatch({ type: 'away', away: !!away });
+    },
+    /**
+     * Where the orb is on screen while it shows (its sphere's square, and whether it's on the right), for the quest
+     * log's heads-ups beside it (in place of the spine); null otherwise.
+     */
+    anchor() {
+      if (!alive() || !win.isVisible() || !orbState.look(orb).orb) return null;
+      const b = win.getBounds();
+      const g = orbState.orbGeometry(scale());
+      const right = prefs.corner === 'tr' || prefs.corner === 'br';
+      const bottom = prefs.corner === 'bl' || prefs.corner === 'br';
+      return {
+        rect: { x: right ? b.x + b.width - g.box : b.x, y: bottom ? b.y + b.height - g.box : b.y, width: g.box, height: g.box },
+        right,
+      };
+    },
+    /** The app's look changed (its theme's colour): the orb and the card redraw in it. */
+    restyle() {
+      send('orb-state', orbLook());
+    },
     setPrefs(p) {
-      prefs = { size: SCALE[p && p.size] ? p.size : 'm', corner: ['tr', 'tl', 'br', 'bl'].includes(p && p.corner) ? p.corner : 'tr', speak: !(p && p.speak === false) };
-      if (win && !win.isDestroyed()) place();
+      const orbWas = orb.on;
+      prefs = {
+        size: SCALE[p && p.size] ? p.size : 'm',
+        corner: ['tr', 'tl', 'br', 'bl'].includes(p && p.corner) ? p.corner : 'tr',
+        speak: !(p && p.speak === false),
+        orb: !(p && p.orb === false),
+      };
+      if (prefs.orb !== orbWas) {
+        if (!prefs.orb) stopWatch();
+        orb = orbState.reduce(orb, { type: 'pref', on: prefs.orb });
+        applyMouseMode();
+        // Turned off with nothing on the card: the window goes (the spine and the ribbon come back, main.cjs).
+        if (!prefs.orb && !shownAt) drop();
+        dispatch({ type: 'pref', on: prefs.orb });
+      }
+      if (alive()) place();
+      send('orb-state', orbLook());
     },
   };
   return api;

@@ -377,6 +377,11 @@ export interface AppSettings {
   popupHidePanel?: boolean;
   /** Read the pop-up's summary aloud (default on; the card's speaker button turns it off too). */
   popupReadAloud?: boolean;
+  /**
+   * The orb (owner, Nov 19 2026): a glass orb in the pop-up's corner while the panel is away, which answers grow out of
+   * and fold back into, in place of the book spine at the screen edge (default on; off brings the spine back).
+   */
+  popupOrb?: boolean;
   /** "Where was I?" (session companion step 1): a recap card when a game starts after a day or more (default on). */
   recapCard?: boolean;
   /** The open combo was moved off View + Menu to L3 + R3 (once, Nov 17 2026; App.tsx). */

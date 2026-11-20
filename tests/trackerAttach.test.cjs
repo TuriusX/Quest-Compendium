@@ -59,6 +59,7 @@ async function setup({ existing }) {
     getPanelRect: () => env.panel,
     getDock: () => env.dock,
     getSpineAnchor: () => env.spine,
+    hideRibbon: () => !!env.orb,
     onOpenPanel: () => env.onOpenPanel && env.onOpenPanel(),
     onLogVisible: (visible, available) => { env.keys = { visible, available }; },
   });
@@ -227,6 +228,28 @@ async function test(name, fn) {
     await new Promise((r) => setTimeout(r, 450));
     assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'tracker.json'), 'utf8')).g1.attach, true);
     assert.ok(env.told.some((p) => p.type === 'visibility' && p.attached === true && p.visible === true), 'back in the overlay, out');
+    tracker.hide();
+  });
+
+  await test('the orb on (Nov 19 2026): a popped-out log put away has no ribbon, but its heads-ups show; off, the ribbon is back', async () => {
+    const { tracker, win, env, handlers } = await setup({ existing: false });
+    env.panel = { x: 1370, y: 0, width: 550, height: 800 };
+    tracker.panelShown();
+    await handlers['tracker-attach'](null, false);
+    env.panel = null; tracker.panelHidden();
+    env.orb = true;
+    await tracker.toggle(null); // put away
+    assert.equal(tracker.isLogVisible(), false);
+    assert.equal(win.opacity, 0, 'no ribbon at the screen edge');
+    env.orb = false;
+    tracker.anchorChanged();
+    assert.equal(win.opacity, 1, 'the orb off: the ribbon');
+    env.orb = true;
+    tracker.anchorChanged();
+    assert.equal(win.opacity, 0, 'on again: gone');
+    assert.equal(tracker.heads('Dig'), true);
+    assert.equal(win.opacity, 1, 'the heads-up shows');
+    assert.ok(win.js.some((c) => c.includes('qcTrackerHeads')));
     tracker.hide();
   });
 

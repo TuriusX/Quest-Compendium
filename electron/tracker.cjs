@@ -334,10 +334,13 @@ function attachSettings() {
   const on = isAttached();
   return { attached: on, side, attachOffer: false };
 }
+const ribbonOff = () => !!(deps && deps.hideRibbon && deps.hideRibbon());
 const shouldHideAttached = () => {
   // Popped out (owner, Nov 15 2026): the app draws the log in its own window (logWindow.cjs); this window only shows
   // as the edge ribbon (put away) and for heads-ups beside it.
-  if (!isAttached()) return !!current && settingsFor(current.gameKey).view !== 'away' && headsUntil <= Date.now();
+  // With the orb on (answerCard.cjs, owner Nov 19 2026), no ribbon at the screen edge either: the orb's menu (or the
+  // quest log shortcut) brings the log back. Heads-ups still show.
+  if (!isAttached()) return !!current && (settingsFor(current.gameKey).view !== 'away' || ribbonOff()) && headsUntil <= Date.now();
   const a = anchor();
   if (!a) return true; // nothing to stick to
   if (headsUntil > Date.now()) return false; // a heads-up beside the spine
@@ -727,9 +730,9 @@ function heads(text) {
   const MS = 4000;
   headsUntil = Date.now() + MS;
   clearTimeout(headsTimer);
-  headsTimer = setTimeout(() => { headsUntil = 0; if (docked) syncAttach(); }, MS + 80);
+  headsTimer = setTimeout(() => { headsUntil = 0; syncAttach(); }, MS + 80);
   js(`window.qcTrackerHeads(${JSON.stringify(String(text).slice(0, 160))}, ${MS})`);
-  if (docked) syncAttach();
+  syncAttach(); // (popped out with the ribbon off: shown for the heads-up only)
   if (!win.isVisible()) { win.showInactive(); afterShow(); }
   return true;
 }

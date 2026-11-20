@@ -8,7 +8,7 @@
 <style>
   /* Pop-up answers over the game (answerCard.cjs; owner, Nov 17-18 2026, docs "Pop-up answers"). Never focused; the
      mouse only reaches it over the card. Sizes are for a 1080p screen at Medium (--s scales Small / Large). */
-  :root { --accent: #a87ffb; --s: 1; --ink: #ece9f4; --muted: #a49db8; --amber: #f3b64c; --good: #6fd39a; }
+  :root { --accent: #a87ffb; --s: 1; --ink: #ece9f4; --muted: #a49db8; --amber: #f3b64c; --good: #6fd39a; --box: 104px; --d: 60px; --pad: 22px; }
   html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none;
                font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; color: var(--ink); }
   .card { position: absolute; top: 0; width: 100%; box-sizing: border-box; border-radius: calc(16px * var(--s));
@@ -20,7 +20,7 @@
   .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: calc(26px * var(--s)); }
   .place { font: calc(12px * var(--s)) 'Silkscreen', ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .chip { font-weight: 700; font-size: calc(12px * var(--s)); color: var(--accent); border: 1px solid rgba(168, 127, 251, .5); border-radius: 999px; padding: 1px calc(9px * var(--s)); flex: none; }
+  .chip { font-weight: 700; font-size: calc(12px * var(--s)); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); border-radius: 999px; padding: 1px calc(9px * var(--s)); flex: none; }
   .btns { display: none; gap: calc(6px * var(--s)); flex: none; }
   body.hover .btns { display: flex; }
   body.hover .chip { display: none; }
@@ -35,7 +35,7 @@
   .slot { width: calc(132px * var(--s)); display: flex; flex-direction: column; gap: 4px; }
   .slot .img { position: relative; aspect-ratio: 4 / 3; border-radius: calc(10px * var(--s)); background: #000 center / cover no-repeat; border: 1px solid rgba(255, 255, 255, .2); }
   .slot .img.video::after { content: ""; position: absolute; left: 50%; top: 50%; width: calc(34px * var(--s)); height: calc(34px * var(--s)); margin: calc(-17px * var(--s)) 0 0 calc(-17px * var(--s));
-                            border-radius: 50%; background: rgba(168, 127, 251, .92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 7l8 5-8 5z' fill='%2316101f'/%3E%3C/svg%3E") center / 60% no-repeat; }
+                            border-radius: 50%; background: color-mix(in srgb, var(--accent) 92%, transparent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 7l8 5-8 5z' fill='%2316101f'/%3E%3C/svg%3E") center / 60% no-repeat; }
   .slot .cap { font-size: calc(11.5px * var(--s)); color: var(--muted); line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* A drawn answer (drawnAnswer.ts) is the picture itself: across the card, whole (never cropped); a click makes it
      bigger, another back. Illustrations carry their label on the picture. */
@@ -78,16 +78,72 @@
   .timer i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; }
   .fight .t { color: #ffd0d0; }
   body.fight .card { border-color: #ff7a7a; }
-  @media (prefers-reduced-motion: reduce) { .card { transition: none; } .stages .now b { animation: none; } }
+  /* The orb's how-to-ask line (no answer yet). */
+  .line { font-weight: 600; font-size: calc(17px * var(--s)); line-height: 1.4; padding-right: calc(4px * var(--s)); }
+
+  /* ---- The orb (owner, Nov 19 2026; answerCard.cjs) ------------------------------------------------------------------
+     A clear glass orb in the theme's colour (owner, Nov 19 2026: nothing inside) in the card's corner (drawn in WebGL below), the card growing out of it and folding
+     back in. The window is the card's full room; the mouse reaches only the orb, the card and the menu (the main process
+     hit-tests them, see hits()). */
+  body.orbmode .card { transition: none; transform: none; opacity: 1; visibility: hidden; }
+  body.orbmode.open .card { visibility: visible; }
+  body.orbmode.right .card { right: 0; }
+  body.orbmode:not(.right) .card { left: 0; }
+  body.orbmode.hintcard .card { width: auto; max-width: 100%; min-width: calc(var(--box) * 2.4); }
+  body.orbmode.hintcard .in { min-height: calc(var(--pad) + var(--d) + 2px); box-sizing: border-box; justify-content: center; }
+  body.orbmode.answer .sum, body.orbmode.answer .t, body.orbmode.answer .intro, body.orbmode.answer .steps, body.orbmode.answer .body:not(.scroll) { cursor: pointer; }
+  /* The card's own glass while it morphs: the orb's violet, fading into the card. */
+  .goo { position: absolute; inset: 0; pointer-events: none; opacity: 0; border-radius: inherit;
+         background: radial-gradient(circle at var(--gx, 90%) var(--gy, 10%), color-mix(in srgb, color-mix(in srgb, var(--accent) 60%, white) 95%, transparent) 0, color-mix(in srgb, var(--accent) 85%, transparent) calc(var(--d) * .35), color-mix(in srgb, color-mix(in srgb, var(--accent) 55%, black) 90%, transparent) calc(var(--d) * .9), color-mix(in srgb, color-mix(in srgb, var(--accent) 25%, #0d0c14) 96%, transparent) calc(var(--d) * 2.2), rgba(13, 12, 20, .96) 70%); }
+  #cardWrap { position: absolute; inset: 0; pointer-events: none; }
+  #cardWrap > .card { pointer-events: auto; }
+  #orb { position: absolute; width: var(--box); height: var(--box); display: none; cursor: pointer; }
+  body.right #orb { right: 0; } body:not(.right) #orb { left: 0; }
+  body.bottom #orb { bottom: 0; } body:not(.bottom) #orb { top: 0; }
+  body.orbshow #orb { display: block; }
+  #orbGl, #orbCss { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* Without WebGL: the same orb in CSS (flatter). */
+  #orbCss { display: none; border-radius: 50%; inset: var(--pad);  width: var(--d); height: var(--d);
+            background: radial-gradient(circle at 34% 28%, rgba(255, 255, 255, .9) 0, rgba(255, 255, 255, 0) 16%),
+                        radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--accent) 25%, transparent), color-mix(in srgb, var(--accent) 55%, transparent) 70%, color-mix(in srgb, color-mix(in srgb, var(--accent) 50%, white) 80%, transparent) 100%);
+            box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 60%, transparent), inset 0 0 12px rgba(255, 255, 255, .25); }
+  body.nogl #orbCss { display: block; } body.nogl #orbGl { display: none; }
+  /* A card whose time ran out waits in the orb: a small dot (and the orb's glow pulses, in the shader). */
+  #orbDot { position: absolute; width: calc(12px * var(--s)); height: calc(12px * var(--s)); border-radius: 50%; display: none;
+            background: radial-gradient(circle at 40% 35%, #fff3d0, var(--amber) 60%); box-shadow: 0 0 8px var(--amber), 0 0 0 2px rgba(13, 12, 20, .85);
+            top: calc(var(--pad) + var(--d) * .06); }
+  body.right #orbDot { left: calc(var(--pad) + var(--d) * .78); } body:not(.right) #orbDot { left: calc(var(--pad) + var(--d) * .78); }
+  body.dot #orbDot { display: block; }
+  /* Its right-click menu: drawn here (a native menu would take focus from the game). */
+  #menu { position: absolute; display: none; min-width: calc(232px * var(--s)); padding: calc(6px * var(--s)); box-sizing: border-box;
+          background: rgba(16, 13, 28, .95); border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: calc(14px * var(--s));
+          box-shadow: 0 10px 30px rgba(0, 0, 0, .55), 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent); transform-origin: var(--mo, top right);
+          animation: menuIn .16s cubic-bezier(.2, .9, .3, 1.2); }
+  @keyframes menuIn { from { opacity: 0; transform: scale(.9); } }
+  body.menu #menu { display: block; }
+  body.right #menu { right: calc(var(--pad) - 4px); } body:not(.right) #menu { left: calc(var(--pad) - 4px); }
+  body:not(.bottom) #menu { top: calc(var(--box) - var(--pad) + 8px); } body.bottom #menu { bottom: calc(var(--box) - var(--pad) + 8px); }
+  #menu button { display: flex; align-items: center; gap: calc(10px * var(--s)); width: 100%; padding: calc(8px * var(--s)) calc(10px * var(--s)); border: 0; border-radius: calc(9px * var(--s));
+                 background: transparent; color: var(--ink); font: 600 calc(14px * var(--s)) inherit; font-family: inherit; text-align: left; cursor: pointer; }
+  #menu button:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  #menu button svg { width: calc(17px * var(--s)); height: calc(17px * var(--s)); flex: none; color: var(--accent); }
+  #menu button span { flex: 1; }
+  #menu button i { font-style: normal; color: var(--accent); font-weight: 800; visibility: hidden; }
+  #menu button.on i { visibility: visible; }
+  #menu hr { border: 0; border-top: 1px solid rgba(255, 255, 255, .08); margin: calc(4px * var(--s)) calc(6px * var(--s)); }
+  @media (prefers-reduced-motion: reduce) { .card { transition: none; } .stages .now b { animation: none; } #menu { animation: none; } }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
+<div id="cardWrap">
 <div class="card" id="card">
-  <div class="in">
-    <div class="top"><span class="place" id="place"></span><span class="topR"><span class="chip" id="chip"></span>
+  <div class="goo" id="goo"></div>
+  <div class="in" id="in">
+    <div class="top" id="topRow"><span class="place" id="place"></span><span class="topR"><span class="chip" id="chip"></span>
       <span class="btns"><button class="btn primary" id="bMore"></button><button class="btn" id="bOpen"></button><button class="btn" id="bClose">✕</button></span>
       <button class="spk" id="bSpeak" hidden></button></span></div>
+    <div class="line" id="line" hidden></div>
     <div class="head" id="head">
       <div><div class="q" id="q"></div><div class="t" id="title"></div></div>
       <div class="slot" id="slot" hidden><div class="img" id="img"></div><div class="cap" id="cap"></div></div>
@@ -103,6 +159,16 @@
   </div>
   <div class="timer" id="timerBar"><i id="timer"></i></div>
 </div>
+</div>
+<div id="orb" role="button"><canvas id="orbGl"></canvas><div id="orbCss"></div><div id="orbDot"></div></div>
+<div id="menu" role="menu">
+  <button data-k="open" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg><span></span><i></i></button>
+  <button data-k="log" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg><span></span><i></i></button>
+  <button data-k="ask" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg><span></span><i></i></button>
+  <hr>
+  <button data-k="mute" role="menuitemcheckbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 6 6"/><path d="m22 9-6 6"/></svg><span></span><i>✓</i></button>
+  <button data-k="hide" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg><span></span><i></i></button>
+</div>
 <script>
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -110,6 +176,8 @@
   let cur = null; // what's on the card
   let expanded = false;
   let proTimer = null;
+  // The orb (from the app: answerCard.cjs orbLook): on, orb (showing), card, dot, menu, geo { d, box, pad }, speak.
+  let O = { on: false };
 
   // Plain text from the answer's markdown: no emphasis marks or headings, bullets as •.
   const plain = (s) => String(s || '')
@@ -158,7 +226,7 @@
 
   // How tall the card is: the window follows it (never taller than the app allows).
   function report() {
-    requestAnimationFrame(() => window.qcCard.size(Math.ceil($('card').getBoundingClientRect().height)));
+    requestAnimationFrame(() => { window.qcCard.size(Math.ceil($('card').getBoundingClientRect().height)); hits(); });
   }
   // Parts of a long answer: More shows the next part of the text, in place.
   function partInfo() {
@@ -182,9 +250,19 @@
     window.qcCard.state({ more: pi.more, part: pi.part, parts: pi.parts });
   }
 
+  /** The card's own parts back (the orb's hint line hides them). */
+  function cardParts(hint) {
+    document.body.classList.toggle('hintcard', !!hint);
+    $('line').hidden = !hint;
+    $('topRow').hidden = !!hint;
+    $('head').hidden = !!hint;
+    $('foot').hidden = !!hint;
+  }
+
   function showThinking(d) {
     cur = d; expanded = false;
-    document.body.classList.remove('expanded', 'fight');
+    cardParts(false);
+    document.body.classList.remove('expanded', 'fight', 'answer');
     $('place').textContent = d.place || '';
     $('chip').textContent = d.model || '';
     $('chip').hidden = !d.model;
@@ -217,8 +295,10 @@
 
   function showAnswer(d) {
     cur = d; expanded = false;
+    cardParts(false);
     clearTimeout(proTimer);
     document.body.classList.remove('expanded');
+    document.body.classList.add('answer');
     document.body.classList.toggle('fight', !!d.combat);
     $('place').textContent = d.place || '';
     $('chip').textContent = d.model || '';
@@ -278,6 +358,20 @@
     requestAnimationFrame(() => { if (!todo.length) d.hasMore = body.scrollHeight > body.clientHeight + 2; paintFoot(); report(); });
   }
 
+  /** The orb's line on how to ask, when there's no answer to bring back yet. */
+  function showHint(d) {
+    cur = d; expanded = false;
+    clearTimeout(proTimer);
+    document.body.classList.remove('expanded', 'fight', 'answer');
+    cardParts(true);
+    for (const id of ['stages', 'sum', 'intro', 'warn', 'body', 'wide']) $(id).hidden = true;
+    $('steps').innerHTML = '';
+    const combo = S.combo || 'L3 + R3';
+    $('line').textContent = S.askKeys ? fmt(S.orbHint, { keys: S.askKeys, combo }) : fmt(S.orbHintPad, { combo });
+    $('timerBar').hidden = false;
+    report();
+  }
+
   // More: the full answer in place, then the next part of it; after the last part, the panel.
   function more() {
     if (!cur || cur.state !== 'answer') return;
@@ -302,14 +396,363 @@
     report();
   }
 
-  window.qcCard.onShow((d) => {
-    S = d.strings || S;
+  // ---- The orb ------------------------------------------------------------------------------------------------------
+
+  /**
+   * The glass orb, drawn in WebGL: a translucent violet sphere (the game shows through its body) with a fresnel rim, a
+   * sharp highlight, soft made-up reflections (a studio sky and a window; nothing of the real screen is ever captured),
+   * light gathered at the far rim and low inside, and nothing else: clear glass in the theme's colour. It drifts and shimmers at a few
+   * frames a second while resting (it costs next to nothing), at full speed only while the mouse is on it or it morphs.
+   */
+  const Glass = (() => {
+    const cv = $('orbGl');
+    let gl = null, prog = null, U = {}, ok = false;
+    let running = false, timerId = 0, rafId = 0;
+    let hover = 0, hoverTo = 0, pulse = false, fast = 0;
+    const t0 = performance.now();
+    const VS = 'attribute vec2 p; varying vec2 v; void main(){ v = p * .5 + .5; gl_Position = vec4(p, 0., 1.); }';
+    const FS = `
+      precision highp float;
+      varying vec2 v;
+      uniform float uT, uR, uHover, uPulse, uPx;
+      uniform vec3 uTint;
+      void main() {
+        vec2 p = (v - .5) * 2.;
+        p.y -= sin(uT * .9) * .022;                       // the gentle float
+        float R = uR * (1. + .035 * uHover);
+        float d = length(p);
+        float inside = 1. - smoothstep(R - uPx, R + uPx, d);
+        // The glow around it (brighter on hover, pulsing while a card waits).
+        float g = max(d - R, 0.);
+        float glow = exp(-g * 8.5) * (.30 + .22 * uHover + .38 * uPulse) * (1. - inside);
+        vec3 col = uTint * glow * 1.15;
+        float a = glow;
+        if (inside > 0.) {
+          vec2 q = p / R;
+          float r2 = min(dot(q, q), 1.);
+          float z = sqrt(1. - r2);
+          vec3 n = vec3(q, z);
+          float fres = pow(1. - z, 2.3);
+          // The glass body: see-through violet, denser toward the rim.
+          // (thicker below, where it holds more of its colour: it reads as a volume, not a disc)
+          float body = .11 + .24 * fres + .10 * smoothstep(-.2, -1., q.y);
+          vec3 glass = uTint * body;
+          // Nothing inside (owner, Nov 19 2026: minimal): light gathered low in the glass, opposite the highlight.
+          float inner = smoothstep(.95, .0, length(q - vec2(.2, -.38))) * .2;
+          vec3 cin = glass + uTint * inner;
+          float ain = body + inner * .45;
+          // Reflections on the front: a made-up studio (dark below, light above, a soft window up left), shimmering.
+          vec3 r = reflect(vec3(0., 0., -1.), n);
+          float sky = smoothstep(-.3, .95, r.y);
+          vec3 env = mix(vec3(.08, .05, .16), vec3(.82, .78, 1.), sky);
+          float win = smoothstep(.34, .04, length((r.xy - vec2(-.58, .66)) * vec2(1.6, 1.)));
+          float shim = .5 + .5 * sin(atan(q.y, q.x) * 3. + uT * .55 + r2 * 4.);
+          env *= .72 + .28 * shim;
+          // The sharp highlight, its soft halo, and light gathered at the far rim (a caustic).
+          vec3 L = normalize(vec3(-.8, .9, .2));
+          float nh = max(dot(n, normalize(L + vec3(0., 0., 1.))), 0.);
+          float spec = pow(nh, 220.) * 1.9 + pow(nh, 22.) * .2;
+          float far = max(dot(normalize(q + 1e-4), -normalize(L.xy)), 0.);
+          float caus = pow(far, 3.) * smoothstep(.55, .93, sqrt(r2)) * (1. - smoothstep(.93, 1., sqrt(r2)));
+          vec3 light = env * fres * .9 + vec3(.95, .92, 1.) * win * (.3 + .7 * fres) * (.8 + .2 * shim) + vec3(spec) + (uTint * .8 + .2) * caus * (1.05 + .6 * uPulse) + uTint * .2 * uHover * fres;
+          cin += light;
+          ain = clamp(ain + max(max(light.r, light.g), light.b) * .8, 0., 1.);
+          // A thin bright rim, as glass catches the light at its edge.
+          float rim = smoothstep(.90, .985, sqrt(r2)) * (1. - smoothstep(.985, 1., sqrt(r2)));
+          cin += vec3(.75, .68, 1.) * rim * .35;
+          ain = clamp(ain + rim * .3, 0., 1.);
+          // and a dark band just inside it, where the glass bends the light away (a crisp edge on any background)
+          float edge = smoothstep(.78, .93, sqrt(r2)) * (1. - smoothstep(.93, .975, sqrt(r2)));
+          ain = clamp(ain + edge * .16, 0., 1.);
+          col = mix(col, cin, inside);
+          a = mix(a, ain, inside);
+        }
+        gl_FragColor = vec4(col, a);
+      }`;
+    function compile(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      return s;
+    }
+    function init() {
+      try {
+        gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false, powerPreference: 'low-power' });
+        if (!gl) throw new Error('no WebGL');
+        prog = gl.createProgram();
+        gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+        gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+        gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+        gl.useProgram(prog);
+        const buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+        const loc = gl.getAttribLocation(prog, 'p');
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        for (const k of ['uT', 'uR', 'uHover', 'uPulse', 'uPx', 'uTint']) U[k] = gl.getUniformLocation(prog, k);
+        cv.addEventListener('webglcontextlost', (e) => { e.preventDefault(); ok = false; document.body.classList.add('nogl'); });
+        ok = true;
+      } catch (err) {
+        console.warn('[orb] WebGL unavailable, CSS orb instead:', err && err.message);
+        document.body.classList.add('nogl');
+      }
+    }
+    const tint = () => {
+      const m = /^#?([0-9a-f]{6})$/i.exec(String(S.accent || '#a87ffb').trim());
+      const n = parseInt(m ? m[1] : 'a87ffb', 16);
+      return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+    };
+    function size() {
+      const g = O.geo || { box: 104, d: 60 };
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const w = Math.round(g.box * dpr);
+      if (cv.width !== w) { cv.width = w; cv.height = w; }
+      return g;
+    }
+    function draw() {
+      if (!ok) return;
+      const g = size();
+      hover += (hoverTo - hover) * 0.18;
+      const t = (performance.now() - t0) / 1000;
+      gl.viewport(0, 0, cv.width, cv.height);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.uniform1f(U.uT, t);
+      gl.uniform1f(U.uR, g.d / g.box);
+      gl.uniform1f(U.uHover, hover);
+      gl.uniform1f(U.uPulse, pulse ? 0.5 + 0.5 * Math.sin(t * 2.6) : 0);
+      gl.uniform1f(U.uPx, 2.4 / cv.width);
+      gl.uniform3fv(U.uTint, tint());
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+    // Frames: full speed while hovered, easing or morphing; 12 a second while a card waits (the pulse); else 5.
+    function tick() {
+      timerId = 0; rafId = 0;
+      if (!running) return;
+      draw();
+      const quick = hoverTo > 0 || Math.abs(hover - hoverTo) > 0.01 || performance.now() < fast;
+      if (quick) rafId = requestAnimationFrame(tick);
+      else timerId = setTimeout(tick, pulse ? 1000 / 12 : 1000 / 5);
+    }
+    function kick() {
+      if (!running) return;
+      clearTimeout(timerId); cancelAnimationFrame(rafId);
+      tick();
+    }
+    return {
+      init,
+      run(on) { if (on === running) return; running = on; if (on) kick(); else { clearTimeout(timerId); cancelAnimationFrame(rafId); } },
+      hover(on) { hoverTo = on ? 1 : 0; kick(); },
+      pulse(on) { if (pulse !== !!on) { pulse = !!on; kick(); } },
+      fastFor(ms) { fast = performance.now() + ms; kick(); },
+      rgb: () => tint(),
+      draw,
+    };
+  })();
+  Glass.init();
+
+  // ---- The morph: the orb stretches and flattens into the card, and folds back into it ----------------------------
+  let isOpen = false; // the card is out (or opening)
+  let anims = [];
+  const stopAnims = () => { for (const a of anims) a.cancel(); anims = []; };
+  /** The orb's sphere, the flattened pill on the way, and the whole card, as clip-path insets of the card. */
+  function shapes() {
+    const g = O.geo || { box: 104, d: 60, pad: 22 };
+    const card = $('card');
+    const W = card.offsetWidth, H = card.offsetHeight;
+    const right = document.body.classList.contains('right'), bottom = document.body.classList.contains('bottom');
+    // The sphere's centre in the card's own coordinates (the card sits in the window's corner, like the orb).
+    const cx = right ? W - g.box / 2 : g.box / 2;
+    const cy = bottom ? H - g.box / 2 : g.box / 2;
+    const r = g.d / 2;
+    const ins = (x0, y0, x1, y1, rad) => `inset(${y0}px ${W - x1}px ${H - y1}px ${x0}px round ${rad}px)`;
+    const pillW = Math.max(g.d * 1.6, W * 0.62), pillH = g.d * 0.62;
+    const px0 = right ? cx + r - pillW : cx - r, px1 = right ? cx + r : cx - r + pillW;
+    const radius = 16 * (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--s')) || 1);
+    const goo = $('goo');
+    goo.style.setProperty('--gx', `${cx}px`);
+    goo.style.setProperty('--gy', `${cy}px`);
+    return {
+      orb: ins(cx - r, cy - r, cx + r, cy + r, r),
+      pill: ins(px0, cy - pillH / 2, px1, cy + pillH / 2, pillH / 2),
+      full: ins(0, 0, W, H, radius),
+      origin: `${cx}px ${cy}px`,
+    };
+  }
+  /** A soft glow in the theme's colour around the morphing shape (a drop-shadow, so it follows the clip). */
+  const glow = (size, a) => { const [r, g, b] = Glass.rgb(); return `drop-shadow(${size} rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a}))`; };
+  const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // A spring's settle (a little past, then back), sampled for the card's scale.
+  const SPRING = 'linear(0, 0.25 8%, 0.67 18%, 0.94 28%, 1.06 38%, 1.08 46%, 1.04 58%, 0.99 72%, 1)';
+  function openMorph() {
+    stopAnims();
+    isOpen = true;
+    document.body.classList.add('open', 'morphing');
+    paintOrb();
+    Glass.fastFor(900);
+    const card = $('card');
+    const s = shapes();
+    if (reduced()) { done(); return; }
+    const T = 460;
+    card.style.transformOrigin = s.origin;
+    anims = [
+      card.animate([
+        { clipPath: s.orb, offset: 0, easing: 'cubic-bezier(.45, 0, .35, 1)' },
+        { clipPath: s.pill, offset: 0.34, easing: 'cubic-bezier(.2, .8, .25, 1)' },
+        { clipPath: s.full, offset: 1 },
+      ], { duration: T }),
+      card.animate([{ transform: 'scale(1)' }, { transform: 'scale(1)', offset: 0.34 }, { transform: 'scale(1.035)', offset: 0.7 }, { transform: 'scale(1)' }], { duration: T, easing: 'ease-out' }),
+      $('in').animate([{ opacity: 0 }, { opacity: 0, offset: 0.55 }, { opacity: 1 }], { duration: T, easing: 'ease-out' }),
+      $('timerBar').animate([{ opacity: 0 }, { opacity: 0, offset: 0.5 }, { opacity: 1 }], { duration: T }),
+      $('goo').animate([{ opacity: 1 }, { opacity: 1, offset: 0.3 }, { opacity: 0 }], { duration: T, easing: 'ease-in' }),
+      $('cardWrap').animate([
+        { filter: glow('0 0 14px', 0.85) },
+        { filter: glow('0 0 10px', 0.6), offset: 0.5 },
+        { filter: glow('0 0 0', 0) },
+      ], { duration: T }),
+      $('orb').animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(1.12, .8)' }], { duration: T * 0.3, easing: 'ease-in', fill: 'forwards' }),
+    ];
+    anims[0].onfinish = done;
+    function done() {
+      stopAnims();
+      document.body.classList.remove('morphing');
+      paintOrb();
+      hits();
+    }
+  }
+  function foldMorph() {
+    if (!isOpen) return;
+    stopAnims();
+    isOpen = false;
+    document.body.classList.add('morphing');
+    document.body.classList.remove('hover');
+    hits();
+    const card = $('card');
+    const s = shapes();
+    const finish = () => {
+      stopAnims();
+      document.body.classList.remove('open', 'morphing', 'hintcard');
+      paintOrb();
+      hits();
+    };
+    if (reduced()) { finish(); return; }
+    const T = 440;
+    // The orb shows again under the folding card (it fades in as the card becomes it).
+    paintOrb();
+    Glass.fastFor(900);
+    card.style.transformOrigin = s.origin;
+    anims = [
+      card.animate([
+        { clipPath: s.full, offset: 0, easing: 'cubic-bezier(.55, 0, .75, .3)' },
+        { clipPath: s.pill, offset: 0.62, easing: 'cubic-bezier(.3, 0, .2, 1)' },
+        { clipPath: s.orb, offset: 1 },
+      ], { duration: T, fill: 'forwards' }),
+      card.animate([{ transform: 'scale(1)' }, { transform: 'scale(.985)', offset: 0.5 }, { transform: 'scale(1)' }], { duration: T }),
+      $('in').animate([{ opacity: 1 }, { opacity: 0, offset: 0.3 }, { opacity: 0 }], { duration: T, fill: 'forwards' }),
+      $('timerBar').animate([{ opacity: 1 }, { opacity: 0, offset: 0.25 }, { opacity: 0 }], { duration: T, fill: 'forwards' }),
+      $('goo').animate([{ opacity: 0 }, { opacity: 1, offset: 0.55 }, { opacity: 1 }], { duration: T, fill: 'forwards' }),
+      $('cardWrap').animate([
+        { filter: glow('0 0 0', 0) },
+        { filter: glow('0 0 12px', 0.7), offset: 0.7 },
+        { filter: glow('0 0 14px', 0.85) },
+      ], { duration: T, fill: 'forwards' }),
+      $('card').animate([{ opacity: 1 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }], { duration: T, fill: 'forwards' }),
+      $('orb').animate([{ opacity: 0, transform: 'scale(1.12, .8)' }, { opacity: 0, transform: 'scale(1.12, .8)', offset: 0.66, easing: 'cubic-bezier(.2, .9, .3, 1.35)' }, { opacity: 1, transform: 'scale(1)' }], { duration: T }),
+    ];
+    anims[0].onfinish = finish;
+  }
+
+  /** The orb's classes from its state: showing (unless the card is out), its dot, its menu. */
+  function paintOrb() {
+    const b = document.body.classList;
+    // Resting, or under the card while it grows out of the orb or folds back (the orb's home: on, the panel away).
+    // (A card on its way: the state says so a moment before the card's content arrives; the orb stays till it morphs.)
+    const show = !!O.on && ((!!O.orb && !isOpen) || ((b.contains('morphing') || (!!O.card && !isOpen)) && !!O.home));
+    b.toggle('orbshow', show);
+    b.toggle('dot', show && !!O.dot && !isOpen);
+    b.toggle('menu', !!O.menu && !isOpen);
+    Glass.run(show && !document.hidden);
+    Glass.pulse(!!O.dot);
+    if (O.on) {
+      const m = $('menu');
+      const label = (k, s) => { const el = m.querySelector(`[data-k="${k}"] span`); if (el) el.textContent = s || ''; };
+      label('open', S.orbOpen || 'Open Quest Compendium');
+      label('log', S.orbLog || 'Quest log');
+      label('ask', S.orbAsk || 'Ask a question');
+      label('mute', S.orbMute || 'Mute read-aloud');
+      label('hide', S.orbHide || 'Hide until next answer');
+      const mute = m.querySelector('[data-k="mute"]');
+      mute.classList.toggle('on', O.speak === false);
+      mute.setAttribute('aria-checked', String(O.speak === false));
+      const t = S.orbTip || '';
+      $('orb').title = t;
+      $('orb').setAttribute('aria-label', t);
+    }
+  }
+
+  /** The parts the mouse may reach, for the main process to let the mouse in over them (the card; the orb and its menu). */
+  let lastHits = '';
+  function hits() {
+    const list = [];
+    const box = (id, r, inset = 0) => list.push({ id, x: Math.round(r.left + inset), y: Math.round(r.top + inset), w: Math.round(r.width - inset * 2), h: Math.round(r.height - inset * 2) });
+    const b = document.body.classList;
+    if (!O.on) {
+      if (b.contains('on')) box('card', $('card').getBoundingClientRect());
+    } else if (!b.contains('morphing')) {
+      if (b.contains('orbshow')) box('orb', $('orb').getBoundingClientRect(), (O.geo ? O.geo.pad : 22) - 2);
+      if (isOpen) box('card', $('card').getBoundingClientRect());
+      if (b.contains('menu')) box('menu', $('menu').getBoundingClientRect());
+    }
+    const key = JSON.stringify(list);
+    if (key === lastHits) return;
+    lastHits = key;
+    window.qcCard.hits(list);
+  }
+
+  function setLook(d) {
+    if (d.strings) S = d.strings;
     if (S.accent) document.documentElement.style.setProperty('--accent', S.accent);
     document.documentElement.style.setProperty('--s', String(d.scale || 1));
     document.body.classList.toggle('bottom', !!d.bottom);
+    if (typeof d.right === 'boolean') document.body.classList.toggle('right', d.right);
+  }
+
+  window.qcCard.onOrb((o) => {
+    const wasOn = !!O.on;
+    O = o || {};
+    setLook(o);
+    const g = O.geo;
+    if (g) {
+      document.documentElement.style.setProperty('--box', `${g.box}px`);
+      document.documentElement.style.setProperty('--d', `${g.d}px`);
+      document.documentElement.style.setProperty('--pad', `${g.pad}px`);
+    }
+    document.body.classList.toggle('orbmode', !!O.on);
+    $('menu').style.setProperty('--mo', `${O.bottom ? 'bottom' : 'top'} ${O.right ? 'right' : 'left'}`);
+    if (wasOn && !O.on) { stopAnims(); isOpen = false; document.body.classList.remove('open', 'morphing', 'menu', 'orbshow', 'dot'); Glass.run(false); }
+    paintOrb();
+    hits();
+  });
+  // Where the mouse is (the main process hit-tests it): over the card its buttons show; over the orb it glows.
+  window.qcCard.onHover((id) => {
+    document.body.classList.toggle('hover', id === 'card');
+    Glass.hover(id === 'orb');
+  });
+
+  window.qcCard.onShow((d) => {
+    setLook(d);
     if (d.state === 'thinking') showThinking(d);
+    else if (d.state === 'hint') showHint(d);
     else showAnswer(d);
     document.body.classList.add('on');
+    // With the orb: the card grows out of it (once; later updates redraw it in place).
+    if (O.on && !isOpen) {
+      isOpen = true; // (an update arriving before the next frame doesn't start a second morph)
+      requestAnimationFrame(openMorph);
+    } else requestAnimationFrame(() => hits());
   });
   window.qcCard.onMore(() => more());
   window.qcCard.onTimer((t) => {
@@ -319,11 +762,12 @@
     bar.style.transform = `scaleX(${Math.max(0, Math.min(1, t.left / Math.max(1, t.total)))})`;
     if (!t.paused) requestAnimationFrame(() => { bar.style.transition = `transform ${t.left}ms linear`; bar.style.transform = 'scaleX(0)'; });
   });
-  window.qcCard.onHide(() => document.body.classList.remove('on'));
+  window.qcCard.onHide(() => {
+    document.body.classList.remove('on');
+    if (O.on) foldMorph();
+    else hits();
+  });
   $('body').addEventListener('scroll', () => paintFoot());
-  // The mouse: the buttons show while the pointer is over the card (clicking never takes focus from the game).
-  $('card').addEventListener('mouseenter', () => { document.body.classList.add('hover'); window.qcCard.mouse(true); });
-  $('card').addEventListener('mouseleave', () => { document.body.classList.remove('hover'); window.qcCard.mouse(false); });
   $('bMore').addEventListener('click', () => {
     const act = $('bMore').dataset.act;
     if (act === 'more') more();
@@ -334,6 +778,19 @@
   $('bSpeak').addEventListener('click', () => window.qcCard.action('speak'));
   $('wideImg').addEventListener('click', () => { document.body.classList.toggle('bigpic'); report(); });
   $('wideImg').addEventListener('load', () => report());
+  // With the orb, the answer's text opens the panel at it (owner, Nov 19 2026: the panel comes only when asked for).
+  for (const id of ['sum', 'title', 'intro', 'steps']) $(id).addEventListener('click', () => { if (O.on && cur && cur.state === 'answer') window.qcCard.action('open'); });
+  $('body').addEventListener('click', () => { if (O.on && cur && cur.state === 'answer' && !expanded) window.qcCard.action('open'); });
+  // The orb: a left click brings the last card back, a right click opens its menu.
+  $('orb').addEventListener('click', () => window.qcCard.orb('click'));
+  $('orb').addEventListener('contextmenu', (e) => { e.preventDefault(); window.qcCard.orb('menu'); });
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+  $('menu').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-k]');
+    if (b) window.qcCard.orb(b.dataset.k);
+  });
+  new ResizeObserver(() => hits()).observe($('card'));
+  new ResizeObserver(() => hits()).observe($('menu'));
 </script>
 </body>
 </html>
