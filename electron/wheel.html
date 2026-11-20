@@ -19,7 +19,7 @@
   .keys { margin-top: 10px; font-size: 11.5px; color: #d4d4d8; display: flex; gap: 10px; }
   .g { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; margin-right: 4px;
        border-radius: 4px; font: 800 10px/1 ui-monospace, monospace; color: #16101f; }
-  .g.a { background: #4ade80; } .g.b { background: #f87171; } .g.rs, .g.rb { background: #e4e4e7; }
+  .g.a { background: #4ade80; } .g.b { background: #f87171; } .g.rs, .g.rb, .g.lb { background: #e4e4e7; }
   /* Keyboard and mouse: key caps instead of the controller's buttons, and how to point. */
   .g.kb { background: #e4e4e7; color: #16101f; font: 700 9.5px/1 'Segoe UI', system-ui, sans-serif; padding: 0 5px; }
   .aim { margin-top: 8px; font-size: 10.5px; line-height: 1.3; color: #a1a1aa; max-width: 170px; display: none; }
@@ -73,6 +73,17 @@
         transition: transform .17s cubic-bezier(.2, .9, .3, 1.3) var(--dl), opacity .1s linear var(--dl); }
   .fi svg { width: 46%; height: 46%; }
   .fi.r1 { border-color: color-mix(in srgb, var(--accent) 38%, transparent); }
+  /* The outer ring: hidden until asked for (RB, More, Tab; owner, Nov 19 2026), then it flares out in place. */
+  body.open:not(.outer) .fi.r1 { opacity: 0; transform: translate(var(--bx), var(--by)) scale(.2); pointer-events: none; transition-delay: 0s; }
+  /* More: a small glass button between the orb and the inner ring. */
+  .fmore { position: absolute; width: var(--sz); height: var(--sz); margin: calc(var(--sz) / -2) 0 0 calc(var(--sz) / -2); border-radius: 50%;
+           display: flex; align-items: center; justify-content: center; box-sizing: border-box; cursor: pointer; color: #ece9f4;
+           background: rgba(13, 12, 20, .9); border: 1.5px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+           opacity: 0; transform: translate(var(--bx), var(--by)) scale(.2); transition: transform .17s cubic-bezier(.2, .9, .3, 1.3) 60ms, opacity .1s linear 60ms; }
+  .fmore svg { width: 60%; height: 60%; }
+  body.open .fmore { opacity: 1; transform: none; }
+  body.open .fmore.hot { background: color-mix(in srgb, var(--accent) 35%, rgba(13, 12, 20, .9)); border-style: solid; }
+  body.open.outer .fmore { border-style: solid; color: var(--accent); }
   body.open .fi { opacity: 1; transform: none; }
   body.open .fi.on { transform: scale(1.16); background: var(--accent); color: #16101f; border-color: transparent;
                      box-shadow: 0 0 24px var(--accent), 0 6px 18px rgba(0, 0, 0, .5); transition-delay: 0s; }
@@ -163,13 +174,15 @@
   let L = null;
   let fring = 0;
   let hoverI = -1;
+  let outerOpen = false; // the outer ring, asked for (owner, Nov 19 2026: hidden until then)
+  let moreHover = false; // the mouse on the More button
 
   // The player's controller's names and colours for A and B (controller mode step 4), when the app sent them.
   function keysHtml(g, t) {
     if (mode === 'keys' || mode === 'mouse') {
       // The keyboard's keys (their names aren't translated, like the keys themselves).
       const cap = document.createElement('span');
-      cap.textContent = g === 'a' ? 'Enter' : 'Esc';
+      cap.textContent = g === 'a' ? 'Enter' : g === 'tab' ? 'Tab' : 'Esc';
       const label = document.createElement('span');
       label.textContent = t || '';
       return `<span><span class="g kb">${cap.innerHTML}</span>${label.innerHTML}</span>`;
@@ -206,13 +219,21 @@
     let keys = listening ? (held ? '' : k('a', strings.ask) + k('b', strings.cancel)) : k('a', strings.select) + k('b', strings.close);
     document.body.classList.toggle('listening', listening);
     if (fan) {
-      // The fan's caption: the pointed item's name; nothing pointed yet, how to point.
+      // The fan's caption: the pointed item's name (or More's); nothing pointed yet, how to point.
       document.querySelectorAll('#fanItems .fi').forEach((el) => el.classList.toggle('on', Number(el.dataset.i) === sel));
+      document.body.classList.toggle('outer', outerOpen);
+      const fm = document.getElementById('fmore');
+      if (fm) fm.classList.toggle('hot', moreHover);
+      const moreLabel = outerOpen ? strings.fanLess || '' : strings.fanMore || '';
       if (!listening && mode === 'mouse') keys = k('b', strings.close);
-      if (!listening && mode === 'pad' && L && L.outer && strings.fanMore) keys += k('rb', strings.fanMore);
+      // How to reach the outer ring: RB / LB on a controller, Tab on the keyboard (the mouse has the More button).
+      if (!listening && L && L.outer && moreLabel) {
+        if (mode === 'pad') keys += k(outerOpen ? 'lb' : 'rb', moreLabel);
+        else if (mode === 'keys') keys += k('tab', moreLabel);
+      }
       document.getElementById('ftitle').textContent = strings.title || '';
-      document.getElementById('flabel').textContent = label;
-      document.getElementById('fhint').textContent = listening || sel >= 0 ? '' : mode === 'keys' ? strings.aim || '' : mode === 'mouse' ? strings.fanClick || '' : '';
+      document.getElementById('flabel').textContent = moreHover && !listening ? moreLabel : label;
+      document.getElementById('fhint').textContent = listening || sel >= 0 || moreHover ? '' : mode === 'keys' ? strings.aim || '' : mode === 'mouse' ? strings.fanClick || '' : '';
       document.getElementById('fkeys').innerHTML = keys;
       requestAnimationFrame(fanHits);
       return;
@@ -233,18 +254,8 @@
     root.setProperty('--s', String(s));
     root.setProperty('--hx', `${hx}px`);
     root.setProperty('--hy', `${hy}px`);
-    root.setProperty('--hd', `${Math.round(26 * s)}px`);
-    root.setProperty('--cw', `${L.caption.w}px`);
-    // The fan's glass behind the items: a quarter ring from just outside the orb to past the outer ring.
-    const pt = (t, R) => [hx + L.hx * Math.cos(t * Math.PI / 2) * R, hy + L.vy * Math.sin(t * Math.PI / 2) * R].map((v) => v.toFixed(1)).join(' ');
-    const r0 = Math.round(44 * s), r9 = L.reach + Math.round(12 * s);
-    const sw = L.hx * L.vy > 0 ? 1 : 0;
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#a87ffb';
-    document.getElementById('fanBack').innerHTML =
-      `<defs><radialGradient id="fg" gradientUnits="userSpaceOnUse" cx="${hx}" cy="${hy}" r="${r9}">` +
-      `<stop offset="0" stop-color="${accent}" stop-opacity=".22"/><stop offset=".35" stop-color="#0d0c14" stop-opacity=".5"/><stop offset="1" stop-color="#0d0c14" stop-opacity=".62"/></radialGradient></defs>` +
-      `<path d="M ${pt(0, r9)} A ${r9} ${r9} 0 0 ${sw} ${pt(1, r9)} L ${pt(1, r0)} A ${r0} ${r0} 0 0 ${1 - sw} ${pt(0, r0)} Z" fill="url(#fg)" stroke="${accent}" stroke-opacity=".35" stroke-width="1.5"/>` +
-      (L.outer ? `<path d="M ${pt(0, (L.r1 + L.r2) / 2)} A ${(L.r1 + L.r2) / 2} ${(L.r1 + L.r2) / 2} 0 0 ${sw} ${pt(1, (L.r1 + L.r2) / 2)}" fill="none" stroke="${accent}" stroke-opacity=".16" stroke-width="1"/>` : '');
+    root.setProperty('--hd', `${Math.round(20 * s)}px`);
+    root.setProperty('--cw', `${L.caption.inner.w}px`);
     const box = document.getElementById('fanItems');
     box.innerHTML = '';
     for (const it of L.items) {
@@ -256,22 +267,62 @@
       el.style.setProperty('--sz', `${it.size}px`);
       el.style.setProperty('--bx', `${-it.x}px`);
       el.style.setProperty('--by', `${-it.y}px`);
-      // One after another over 90 ms whatever the count, each flaring for 170 ms: all out in ~260 ms.
-      el.style.setProperty('--dl', `${Math.round((90 * it.i) / Math.max(1, L.items.length - 1))}ms`);
+      // One after another over 90 ms (each ring), each flaring for 170 ms: all out in ~260 ms.
+      const k = it.ring ? it.i - L.inner : it.i, of = it.ring ? L.outer : L.inner;
+      el.style.setProperty('--dl', `${Math.round((90 * k) / Math.max(1, of - 1))}ms`);
       el.innerHTML = svg(items[it.i].key);
       // A click is a pick (the mouse reaches the items only: wheel.cjs lets it in over them).
       el.addEventListener('click', () => { sel = it.i; pick(); });
       box.append(el);
     }
+    // More: opens the outer ring in place (and closes it again). Not an action: nothing is picked.
+    if (L.more) {
+      const m = document.createElement('div');
+      m.className = 'fmore';
+      m.id = 'fmore';
+      m.style.left = `${hx + L.more.x}px`;
+      m.style.top = `${hy + L.more.y}px`;
+      m.style.setProperty('--sz', `${L.more.size}px`);
+      m.style.setProperty('--bx', `${-L.more.x}px`);
+      m.style.setProperty('--by', `${-L.more.y}px`);
+      m.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>';
+      m.addEventListener('click', () => setRing(Fan.toggleOuter(L, { sel, open: outerOpen })));
+      box.append(m);
+    }
     const hub = document.getElementById('fhub');
     hub.style.left = `${hx}px`;
     hub.style.top = `${hy}px`;
     document.body.classList.toggle('fandot', !!fan.dot);
-    // The caption past the fan's edge, growing away from the hub.
+    placeFan();
+    paint();
+  }
+  /** The fan's glass and its caption, out to the inner ring's edge, or past the outer ring while it's open. */
+  function placeFan() {
+    const s = fan.scale, hx = fan.hub.x, hy = fan.hub.y;
+    const reach = outerOpen ? L.reachAll : L.reachInner;
+    const capAt = outerOpen ? L.caption.all : L.caption.inner;
+    const pt = (t, R) => [hx + L.hx * Math.cos(t * Math.PI / 2) * R, hy + L.vy * Math.sin(t * Math.PI / 2) * R].map((v) => v.toFixed(1)).join(' ');
+    const r0 = Math.round(32 * s), r9 = reach + Math.round(10 * s);
+    const sw = L.hx * L.vy > 0 ? 1 : 0;
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#a87ffb';
+    const rm = (L.r1 + L.r2) / 2;
+    document.getElementById('fanBack').innerHTML =
+      `<defs><radialGradient id="fg" gradientUnits="userSpaceOnUse" cx="${hx}" cy="${hy}" r="${r9}">` +
+      `<stop offset="0" stop-color="${accent}" stop-opacity=".22"/><stop offset=".35" stop-color="#0d0c14" stop-opacity=".5"/><stop offset="1" stop-color="#0d0c14" stop-opacity=".62"/></radialGradient></defs>` +
+      `<path d="M ${pt(0, r9)} A ${r9} ${r9} 0 0 ${sw} ${pt(1, r9)} L ${pt(1, r0)} A ${r0} ${r0} 0 0 ${1 - sw} ${pt(0, r0)} Z" fill="url(#fg)" stroke="${accent}" stroke-opacity=".35" stroke-width="1.5"/>` +
+      (outerOpen && L.outer ? `<path d="M ${pt(0, rm)} A ${rm} ${rm} 0 0 ${sw} ${pt(1, rm)}" fill="none" stroke="${accent}" stroke-opacity=".16" stroke-width="1"/>` : '');
     const cap = document.getElementById('fcap');
     cap.style.left = cap.style.right = cap.style.top = cap.style.bottom = '';
-    if (L.hx < 0) cap.style.right = `${innerWidth - (hx + L.caption.x)}px`; else cap.style.left = `${hx + L.caption.x}px`;
-    if (L.vy < 0) cap.style.bottom = `${innerHeight - (hy + L.caption.y)}px`; else cap.style.top = `${hy + L.caption.y}px`;
+    if (L.hx < 0) cap.style.right = `${innerWidth - (hx + capAt.x)}px`; else cap.style.left = `${hx + capAt.x}px`;
+    if (L.vy < 0) cap.style.bottom = `${innerHeight - (hy + capAt.y)}px`; else cap.style.top = `${hy + capAt.y}px`;
+  }
+  /** The outer ring opened or closed (RB / LB, More, Tab, stepping or pointing past the inner ring): nothing is picked. */
+  function setRing(r) {
+    const was = outerOpen;
+    sel = r.sel === null || r.sel === undefined ? -1 : r.sel;
+    outerOpen = !!r.open;
+    fring = r.ring || 0;
+    if (was !== outerOpen) placeFan();
     paint();
   }
   /** The fan's parts the mouse may reach (where they end up, not mid-flare), for wheel.cjs to let the mouse in. */
@@ -282,7 +333,8 @@
     const r = (id, b, i) => list.push({ id, i, x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height) });
     if (inList) r('list', document.getElementById('list').getBoundingClientRect(), -1);
     else {
-      for (const it of L.items) list.push({ id: 'item', i: it.i, x: fan.hub.x + it.x - it.size / 2, y: fan.hub.y + it.y - it.size / 2, w: it.size, h: it.size });
+      for (const it of Fan.visible(L, outerOpen)) list.push({ id: 'item', i: it.i, x: fan.hub.x + it.x - it.size / 2, y: fan.hub.y + it.y - it.size / 2, w: it.size, h: it.size });
+      if (L.more) list.push({ id: 'more', i: -1, x: fan.hub.x + L.more.x - L.more.size / 2, y: fan.hub.y + L.more.y - L.more.size / 2, w: L.more.size, h: L.more.size });
       r('caption', document.getElementById('fcap').getBoundingClientRect(), -1);
     }
     const key = JSON.stringify(list);
@@ -290,13 +342,10 @@
     lastFanHits = key;
     window.qcWheel.hits(list);
   }
-  /** A step along the fan (the d-pad, the arrow keys): inner ring first, then the outer; from nothing, the first or last. */
+  /** A step along the fan (the d-pad, the arrow keys); past the inner ring's last item, the outer ring opens. */
   function stepFan(d) {
-    const n = items.length;
-    if (!n) return;
-    sel = sel < 0 ? (d > 0 ? 0 : n - 1) : (sel + d + n) % n;
-    fring = L && L.items[sel] ? L.items[sel].ring : 0;
-    paint();
+    if (!items.length) return;
+    setRing(Fan.step(L, { sel, open: outerOpen }, d));
   }
 
   function pick() {
@@ -380,6 +429,9 @@
     sel = fan ? -1 : 0;
     fring = 0;
     hoverI = -1;
+    outerOpen = false; // the inner ring only, until the outer one is asked for
+    moreHover = false;
+    document.body.classList.remove('outer');
     lastFanHits = '';
     listening = false;
     held = false;
@@ -394,6 +446,7 @@
     if (e.type === 'hover') {
       // The fan: the mouse over an item (wheel.cjs hit-tests it) points at it; off the items, nothing is pointed.
       hoverI = Number.isInteger(e.i) ? e.i : -1;
+      moreHover = !!e.more;
       if (!fan || inList || listening) return;
       if (hoverI >= 0) { sel = hoverI; aimed = true; fring = L && L.items[sel] ? L.items[sel].ring : fring; }
       else { aimed = false; if (mode === 'mouse') sel = -1; }
@@ -409,6 +462,8 @@
         const i = Fan.aimAt(dx, dy, L);
         if (i === null) { if (aimed) { aimed = false; sel = -1; paint(); } return; }
         aimed = true;
+        // Pointing past the inner ring asks for the outer one (it opens; still nothing is picked).
+        if (L.items[i].ring === 1 && !outerOpen) return void setRing({ sel: i, open: true, ring: 1 });
         if (i !== sel) { sel = i; paint(); }
         return;
       }
@@ -431,7 +486,7 @@
       if (listening) return;
       if (fan) {
         // Either stick points along the fan on its ring (the shoulder buttons switch rings); let go, it stays.
-        const i = Fan.stickAt(Number(e.x) || 0, Number(e.y) || 0, L, fring);
+        const i = Fan.stickAt(Number(e.x) || 0, Number(e.y) || 0, L, outerOpen ? fring : 0);
         if (i !== null && i !== sel) { sel = i; paint(); }
         return;
       }
@@ -456,11 +511,9 @@
       return;
     }
     if (fan && (b === 'lb' || b === 'rb')) {
-      // The other ring: the item there nearest the one pointed at (or just the ring, with nothing pointed yet).
+      // RB opens the outer ring (the pointed item moving to the nearest one there), LB goes back to the inner ring.
       if (!L || !L.outer) return;
-      const o = sel >= 0 ? Fan.otherRing(L, sel) : null;
-      if (o !== null) { sel = o; fring = L.items[o].ring; } else fring = b === 'rb' ? 1 : 0;
-      paint();
+      setRing(Fan.bumper(L, { sel, open: outerOpen }, b));
       return;
     }
     if (dir) {
@@ -489,10 +542,13 @@
       return;
     }
     const n = items.length || 1;
-    if (fan && (k === 'ArrowRight' || k === 'ArrowDown' || k === 'Tab' || k === 'ArrowLeft' || k === 'ArrowUp')) {
+    // The fan: Tab opens (or closes) the outer ring; the arrows step, on past the inner ring's end into the outer one.
+    if (fan && k === 'Tab') { e.preventDefault(); setRing(Fan.toggleOuter(L, { sel, open: outerOpen })); }
+    else if (fan && (k === 'ArrowRight' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowUp')) {
       e.preventDefault();
-      stepFan(k === 'ArrowLeft' || k === 'ArrowUp' || (k === 'Tab' && e.shiftKey) ? -1 : 1);
+      stepFan(k === 'ArrowLeft' || k === 'ArrowUp' ? -1 : 1);
     }
+    else if (fan && /^[1-9]$/.test(k) && !Fan.visible(L, outerOpen).some((it) => it.i === Number(k) - 1)) return; // (not showing)
     else if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'Tab') { e.preventDefault(); sel = (sel + (e.shiftKey && k === 'Tab' ? -1 : 1) + n) % n; paint(); }
     else if (k === 'ArrowLeft' || k === 'ArrowUp') { e.preventDefault(); sel = (sel - 1 + n) % n; paint(); }
     else if (k === 'Enter' || k === ' ') { e.preventDefault(); pick(); }

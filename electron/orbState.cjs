@@ -72,12 +72,14 @@ const clickAction = (hasLast) => (hasLast ? 'recall' : 'hint');
 
 /**
  * The orb's size at a card size's scale (Small 0.85 / Medium 1 / Large 1.3): its sphere's diameter, and the square it's
- * drawn in (room for the glow), with the sphere's offset from the window's corner.
+ * drawn in (room for the glow), with the sphere's offset from the window's corner. Smaller and closer to the corner
+ * (owner, Nov 19 2026, after the first screenshots): a 40 px sphere at Medium (was 60) in a 66 px square (was 104); the
+ * window sits on the screen's corner with the orb in it, so the sphere is 13 px from the edges (was 46).
  */
 function orbGeometry(scale) {
   const s = Number(scale) > 0 ? Number(scale) : 1;
-  const d = Math.round(60 * s);
-  const box = Math.round(104 * s);
+  const d = Math.round(40 * s);
+  const box = Math.round(66 * s);
   return { d, box, pad: Math.round((box - d) / 2) };
 }
 

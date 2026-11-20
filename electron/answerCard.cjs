@@ -173,10 +173,17 @@ function createAnswerCard(opts) {
   function bounds() {
     const d = opts.display();
     const { x, y, width: W, height: H } = d.workArea || d.bounds;
-    const w = width();
-    const h = orb.on ? maxHeight() : Math.max(60, Math.min(maxHeight(), height));
     const right = prefs.corner === 'tr' || prefs.corner === 'br';
     const bottom = prefs.corner === 'bl' || prefs.corner === 'br';
+    // The orb on (owner, Nov 19 2026: the orb closer to the corner): the window sits right on the screen's corner, the
+    // orb in its corner (13 px from the edges at Medium), and the card keeps its MARGIN inside it (the morph slides it
+    // from the orb out to there).
+    if (orb.on) {
+      const w = width() + MARGIN, h = maxHeight() + MARGIN;
+      return { x: Math.round(right ? x + W - w : x), y: Math.round(bottom ? y + H - h : y), width: w, height: h };
+    }
+    const w = width();
+    const h = Math.max(60, Math.min(maxHeight(), height));
     return { x: Math.round(right ? x + W - w - MARGIN : x + MARGIN), y: Math.round(bottom ? y + H - h - MARGIN : y + MARGIN), width: w, height: h };
   }
   function place() {
@@ -189,7 +196,7 @@ function createAnswerCard(opts) {
   // ---- The orb ----------------------------------------------------------------------------------------------------
   // home: where a card grows from and folds back to (the orb on and the panel away, even while hidden until next answer).
   const orbLook = () => ({
-    ...orbState.look(orb), on: orb.on, home: orb.on && orb.away, geo: orbState.orbGeometry(scale()), speak: prefs.speak,
+    ...orbState.look(orb), on: orb.on, home: orb.on && orb.away, geo: { ...orbState.orbGeometry(scale()), inset: MARGIN }, speak: prefs.speak,
     scale: scale(), right: prefs.corner === 'tr' || prefs.corner === 'br', bottom: prefs.corner === 'bl' || prefs.corner === 'br', strings: opts.strings(),
   });
 

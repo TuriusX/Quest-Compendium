@@ -608,9 +608,9 @@ export function ControllerLayer({
       [{ key: 'panel', label: t('pad.openPanel') }, ...quickMenuRef.current.filter((i) => i.key !== 'hide').map(({ key, label }) => ({ key, label }))],
       {
         title: t('pad.quickMenu'), listening: t('pad.listening'), listeningTap: t('pad.listeningTap'), select: t('pad.select'), close: t('common.close'),
-        ask: t('pad.ask'), cancel: t('common.cancel'), back: t('pad.back'), accent, glyphs: { a: glyph('a', style), b: glyph('b', style), rb: glyph('rb', style) },
-        // The fan from the orb (Nov 19 2026): how to pick with the mouse, and the shoulder button's outer ring.
-        fanClick: t('orb.fanClick'), fanMore: t('orb.fanMore'),
+        ask: t('pad.ask'), cancel: t('common.cancel'), back: t('pad.back'), accent, glyphs: { a: glyph('a', style), b: glyph('b', style), rb: glyph('rb', style), lb: glyph('lb', style) },
+        // The fan from the orb (Nov 19 2026): how to pick with the mouse, and opening / closing its outer ring.
+        fanClick: t('orb.fanClick'), fanMore: t('orb.fanMore'), fanLess: t('orb.fanLess'),
         // Opened from the keyboard (the quick menu shortcut): how to point, and listening with Enter.
         aim: t('pad.wheelAim'), listeningKeys: t('pad.listeningKeys'),
         // The quick questions list (its own view in the ring), the answer card's words, and the items the desktop app

@@ -82,7 +82,10 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
     const m = orbGeometry(1), l = orbGeometry(1.3);
     assert.ok(l.d > m.d && l.box > m.box);
     assert.equal(m.pad * 2 + m.d, m.box);
-    assert.ok(m.pad >= 18);
+    assert.ok(m.pad >= 12);
+    // Medium (owner, Nov 19 2026): a 40 px sphere, 13 px from the screen's edges (the window sits on the corner).
+    assert.equal(m.d, 40);
+    assert.equal(m.pad, 13);
   });
 
   // ---- The card's window --------------------------------------------------------------------------------------------
@@ -135,19 +138,19 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
     card.setAway(true);
     tick(1);
     assert.equal(win().visible, true);
-    assert.deepEqual(win().getBounds(), { x: 1920 - 520 - 24, y: 24, width: 520, height: 624 });
+    assert.deepEqual(win().getBounds(), { x: 1920 - 520 - 24, y: 0, width: 520 + 24, height: 624 + 24 });
     assert.equal(lastOrb().orb, true);
     // Click-through without forwarding: the watch lets the mouse in.
     assert.deepEqual(win().ignore[win().ignore.length - 1], [true, false]);
-    assert.deepEqual(card.anchor().rect, { x: 1920 - 24 - 104, y: 24, width: 104, height: 104 });
+    assert.deepEqual(card.anchor().rect, { x: 1920 - 66, y: 0, width: 66, height: 66 });
   });
 
   await test('the mouse gets in only over a part the page reported', () => {
-    fromPage('orb-hits', [{ id: 'orb', x: 520 - 104 + 20, y: 20, w: 64, h: 64 }]);
+    fromPage('orb-hits', [{ id: 'orb', x: 544 - 66 + 11, y: 11, w: 44, h: 44 }]);
     const b = win().getBounds();
     cursor = { x: b.x + 10, y: b.y + 300 }; tick(40);
     assert.deepEqual(win().ignore[win().ignore.length - 1], [true, false]);
-    cursor = { x: b.x + 520 - 50, y: b.y + 50 }; tick(40);
+    cursor = { x: b.x + 544 - 33, y: b.y + 33 }; tick(40);
     assert.deepEqual(win().ignore[win().ignore.length - 1], [false, false]);
     assert.ok(win().sent.some(([c, p]) => c === 'orb-hover' && p === 'orb'));
     cursor = { x: 0, y: 0 }; tick(40);

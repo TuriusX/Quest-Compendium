@@ -8,7 +8,7 @@
 <style>
   /* Pop-up answers over the game (answerCard.cjs; owner, Nov 17-18 2026, docs "Pop-up answers"). Never focused; the
      mouse only reaches it over the card. Sizes are for a 1080p screen at Medium (--s scales Small / Large). */
-  :root { --accent: #a87ffb; --s: 1; --ink: #ece9f4; --muted: #a49db8; --amber: #f3b64c; --good: #6fd39a; --box: 104px; --d: 60px; --pad: 22px; }
+  :root { --accent: #a87ffb; --s: 1; --ink: #ece9f4; --muted: #a49db8; --amber: #f3b64c; --good: #6fd39a; --box: 66px; --d: 40px; --pad: 13px; --ci: 24px; }
   html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none;
                font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; color: var(--ink); }
   .card { position: absolute; top: 0; width: 100%; box-sizing: border-box; border-radius: calc(16px * var(--s));
@@ -87,9 +87,12 @@
      hit-tests them, see hits()). */
   body.orbmode .card { transition: none; transform: none; opacity: 1; visibility: hidden; }
   body.orbmode.open .card { visibility: visible; }
-  body.orbmode.right .card { right: 0; }
-  body.orbmode:not(.right) .card { left: 0; }
-  body.orbmode.hintcard .card { width: auto; max-width: 100%; min-width: calc(var(--box) * 2.4); }
+  /* The card keeps its margin from the screen's edges (--ci) while the orb sits closer to the corner (owner, Nov 19 2026). */
+  body.orbmode .card { top: var(--ci); width: calc(100% - var(--ci)); }
+  body.orbmode.bottom .card { top: auto; bottom: var(--ci); }
+  body.orbmode.right .card { right: var(--ci); }
+  body.orbmode:not(.right) .card { left: var(--ci); }
+  body.orbmode.hintcard .card { width: auto; max-width: calc(100% - var(--ci)); min-width: calc(var(--box) * 2.4); }
   body.orbmode.hintcard .in { min-height: calc(var(--pad) + var(--d) + 2px); box-sizing: border-box; justify-content: center; }
   body.orbmode.answer .sum, body.orbmode.answer .t, body.orbmode.answer .intro, body.orbmode.answer .steps, body.orbmode.answer .body:not(.scroll) { cursor: pointer; }
   /* The card's own glass while it morphs: the orb's violet, fading into the card. */
@@ -110,7 +113,7 @@
   body.nogl #orbCss { display: block; } body.nogl #orbGl { display: none; }
   body.fan #orbCss { filter: brightness(1.35) drop-shadow(0 0 12px var(--accent)); }
   /* A card whose time ran out waits in the orb: a small dot (and the orb's glow pulses, in the shader). */
-  #orbDot { position: absolute; width: calc(12px * var(--s)); height: calc(12px * var(--s)); border-radius: 50%; display: none;
+  #orbDot { position: absolute; width: calc(9px * var(--s)); height: calc(9px * var(--s)); border-radius: 50%; display: none;
             background: radial-gradient(circle at 40% 35%, #fff3d0, var(--amber) 60%); box-shadow: 0 0 8px var(--amber), 0 0 0 2px rgba(13, 12, 20, .85);
             top: calc(var(--pad) + var(--d) * .06); }
   body.right #orbDot { left: calc(var(--pad) + var(--d) * .78); } body:not(.right) #orbDot { left: calc(var(--pad) + var(--d) * .78); }
@@ -561,11 +564,12 @@
   const stopAnims = () => { for (const a of anims) a.cancel(); anims = []; };
   /** The orb's sphere, the flattened pill on the way, and the whole card, as clip-path insets of the card. */
   function shapes() {
-    const g = O.geo || { box: 104, d: 60, pad: 22 };
+    const g = O.geo || { box: 66, d: 40, pad: 13, inset: 24 };
     const card = $('card');
     const W = card.offsetWidth, H = card.offsetHeight;
     const right = document.body.classList.contains('right'), bottom = document.body.classList.contains('bottom');
-    // The sphere's centre in the card's own coordinates (the card sits in the window's corner, like the orb).
+    // The sphere's centre in the card's own coordinates, with the card moved onto the window's corner, like the orb: it
+    // starts there (shift) and slides out to its margin as it grows (owner, Nov 19 2026: the orb closer to the corner).
     const cx = right ? W - g.box / 2 : g.box / 2;
     const cy = bottom ? H - g.box / 2 : g.box / 2;
     const r = g.d / 2;
@@ -581,6 +585,7 @@
       pill: ins(px0, cy - pillH / 2, px1, cy + pillH / 2, pillH / 2),
       full: ins(0, 0, W, H, radius),
       origin: `${cx}px ${cy}px`,
+      shift: `${right ? g.inset || 0 : -(g.inset || 0)}px ${bottom ? g.inset || 0 : -(g.inset || 0)}px`,
     };
   }
   /** A soft glow in the theme's colour around the morphing shape (a drop-shadow, so it follows the clip). */
@@ -605,6 +610,7 @@
         { clipPath: s.pill, offset: 0.34, easing: 'cubic-bezier(.2, .8, .25, 1)' },
         { clipPath: s.full, offset: 1 },
       ], { duration: T }),
+      card.animate([{ translate: s.shift }, { translate: s.shift, offset: 0.2, easing: 'cubic-bezier(.3, .7, .3, 1)' }, { translate: '0px 0px' }], { duration: T }),
       card.animate([{ transform: 'scale(1)' }, { transform: 'scale(1)', offset: 0.34 }, { transform: 'scale(1.035)', offset: 0.7 }, { transform: 'scale(1)' }], { duration: T, easing: 'ease-out' }),
       $('in').animate([{ opacity: 0 }, { opacity: 0, offset: 0.55 }, { opacity: 1 }], { duration: T, easing: 'ease-out' }),
       $('timerBar').animate([{ opacity: 0 }, { opacity: 0, offset: 0.5 }, { opacity: 1 }], { duration: T }),
@@ -651,6 +657,7 @@
         { clipPath: s.pill, offset: 0.62, easing: 'cubic-bezier(.3, 0, .2, 1)' },
         { clipPath: s.orb, offset: 1 },
       ], { duration: T, fill: 'forwards' }),
+      card.animate([{ translate: '0px 0px', easing: 'cubic-bezier(.6, 0, .7, .4)' }, { translate: s.shift, offset: 0.8 }, { translate: s.shift }], { duration: T, fill: 'forwards' }),
       card.animate([{ transform: 'scale(1)' }, { transform: 'scale(.985)', offset: 0.5 }, { transform: 'scale(1)' }], { duration: T }),
       $('in').animate([{ opacity: 1 }, { opacity: 0, offset: 0.3 }, { opacity: 0 }], { duration: T, fill: 'forwards' }),
       $('timerBar').animate([{ opacity: 1 }, { opacity: 0, offset: 0.25 }, { opacity: 0 }], { duration: T, fill: 'forwards' }),
@@ -703,7 +710,7 @@
     if (!O.on) {
       if (b.contains('on')) box('card', $('card').getBoundingClientRect());
     } else if (!b.contains('morphing')) {
-      if (b.contains('orbshow')) box('orb', $('orb').getBoundingClientRect(), (O.geo ? O.geo.pad : 22) - 2);
+      if (b.contains('orbshow')) box('orb', $('orb').getBoundingClientRect(), (O.geo ? O.geo.pad : 13) - 2);
       if (isOpen) box('card', $('card').getBoundingClientRect());
       if (b.contains('menu')) box('menu', $('menu').getBoundingClientRect());
     }
@@ -730,6 +737,7 @@
       document.documentElement.style.setProperty('--box', `${g.box}px`);
       document.documentElement.style.setProperty('--d', `${g.d}px`);
       document.documentElement.style.setProperty('--pad', `${g.pad}px`);
+      document.documentElement.style.setProperty('--ci', `${g.inset || 0}px`);
     }
     document.body.classList.toggle('orbmode', !!O.on);
     $('menu').style.setProperty('--mo', `${O.bottom ? 'bottom' : 'top'} ${O.right ? 'right' : 'left'}`);

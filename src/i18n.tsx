@@ -160,6 +160,7 @@ const en: Dict = {
   "orb.lastCard": "Last card",
   "orb.fanClick": "Click one to pick it",
   "orb.fanMore": "More actions",
+  "orb.fanLess": "Fewer actions",
   "set.recapCard": "Where was I? when I come back",
   "set.recapCardHint": "When you start a game you haven't played for a day or more, a card over the game shows where you left off: where you were, what you were doing and what you last asked.",
   "recap.question": "Where was I?",

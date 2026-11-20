@@ -15,8 +15,8 @@ async function test(name, fn) {
   catch (e) { console.log('FAIL  ' + name + '   -> ' + String(e && e.message).split('\n')[0]); process.exitCode = 1; }
 }
 const AREA = { x: 0, y: 0, width: 1920, height: 1040 };
-// The orb's centre in each corner (the card's window at 24 px from the edges, the orb's 104 px box in its corner).
-const HUB = { tr: { x: 1920 - 24 - 52, y: 24 + 52 }, tl: { x: 24 + 52, y: 24 + 52 }, br: { x: 1920 - 24 - 52, y: 1040 - 24 - 52 }, bl: { x: 24 + 52, y: 1040 - 24 - 52 } };
+// The orb's centre in each corner (the card's window on the screen's corner, the orb's 66 px box in its corner).
+const HUB = { tr: { x: 1920 - 33, y: 33 }, tl: { x: 33, y: 33 }, br: { x: 1920 - 33, y: 1040 - 33 }, bl: { x: 33, y: 1040 - 33 } };
 
 (async () => {
   // ---- The layout ---------------------------------------------------------------------------------------------------
@@ -57,32 +57,74 @@ const HUB = { tr: { x: 1920 - 24 - 52, y: 24 + 52 }, tl: { x: 24 + 52, y: 24 + 5
     for (const n of [2, 5, 7, 12, 16]) {
       for (const s of [0.85, 1, 1.3]) {
         const L = Fan.layout(n, 'tr', s);
-        for (const p of L.items) for (const q of L.items) {
-          if (p.i >= q.i) continue;
-          assert.ok(Math.hypot(p.x - q.x, p.y - q.y) >= (p.size + q.size) / 2 + 4, `n=${n} s=${s} items ${p.i},${q.i} touch`);
+        const all = [...L.items, ...(L.more ? [{ i: 'more', ...L.more }] : [])];
+        for (const p of all) for (const q of all) {
+          if (p === q || String(p.i) >= String(q.i) && typeof p.i === typeof q.i) continue;
+          assert.ok(Math.hypot(p.x - q.x, p.y - q.y) >= (p.size + q.size) / 2 + 3, `n=${n} s=${s} items ${p.i},${q.i} touch`);
         }
-        // Clear of the orb (its glow is ~52 px from the hub at Medium).
-        assert.ok(L.r1 - L.items[0].size / 2 >= 70 * s);
+        // Clear of the orb (a 20 px sphere radius and its glow at Medium).
+        assert.ok(L.r1 - L.items[0].size / 2 >= 60 * s);
+        if (L.more) assert.ok(Math.hypot(L.more.x, L.more.y) - L.more.size / 2 >= 30 * s);
         if (L.outer) assert.ok(L.r2 > L.r1);
       }
     }
     const m = Fan.layout(12, 'tr', 1), l = Fan.layout(12, 'tr', 1.3);
-    assert.ok(l.reach > m.reach && l.items[0].size > m.items[0].size);
+    assert.ok(l.reachInner > m.reachInner && l.items[0].size > m.items[0].size);
+  });
+
+  await test('kept small: 44 px items reaching ~165 px at Medium, the outer ring (38 px) only when asked for', () => {
+    const L = Fan.layout(12, 'tr', 1);
+    assert.equal(L.items[0].size, 44);
+    assert.equal(L.items[5].size, 38);
+    assert.ok(L.reachInner >= 150 && L.reachInner <= 170, `reach ${L.reachInner}`);
+    assert.ok(L.reachAll > L.reachInner);
+    // Showing: the inner ring until the outer one is asked for.
+    assert.deepEqual(Fan.visible(L, false).map((it) => it.i), [0, 1, 2, 3, 4]);
+    assert.equal(Fan.visible(L, true).length, 12);
+    // Five or fewer items: one ring, no More button.
+    const S = Fan.layout(5, 'tr', 1);
+    assert.equal(S.more, null);
+    assert.equal(S.reachAll, S.reachInner);
+  });
+
+  await test('the caption never covers a showing item, the outer ring closed or open, from every corner', () => {
+    for (const corner of ['tr', 'tl', 'br', 'bl']) {
+      for (const n of [5, 12, 16]) {
+        const L = Fan.layout(n, corner, 1);
+        for (const open of [false, true]) {
+          const c = open ? L.caption.all : L.caption.inner;
+          // The caption grows away from the hub from its corner point.
+          const x0 = L.hx < 0 ? c.x - c.w : c.x, y0 = L.vy < 0 ? c.y - c.h : c.y;
+          for (const it of [...Fan.visible(L, open), ...(L.more ? [L.more] : [])]) {
+            const r = it.size / 2;
+            const apart = it.x + r <= x0 || it.x - r >= x0 + c.w || it.y + r <= y0 || it.y - r >= y0 + c.h;
+            assert.ok(apart, `${corner} n=${n} open=${open}: caption over an item`);
+          }
+        }
+      }
+    }
   });
 
   await test('its window sits in the orb\'s corner, holds the whole fan, and stays on the screen', () => {
     for (const corner of ['tr', 'tl', 'br', 'bl']) {
-      const L = Fan.layout(16, corner, 1);
-      const w = Fan.windowFor(HUB[corner], L, AREA);
-      assert.ok(w.x >= 0 && w.y >= 0 && w.x + w.width <= 1920 && w.y + w.height <= 1040, `${corner} off screen`);
-      for (const it of L.items) {
-        const x = w.hub.x + it.x, y = w.hub.y + it.y;
-        assert.ok(x - it.size / 2 >= 0 && x + it.size / 2 <= w.width && y - it.size / 2 >= 0 && y + it.size / 2 <= w.height, `${corner} item ${it.i} outside`);
+      for (const s of [0.85, 1, 1.3]) {
+        const L = Fan.layout(16, corner, s);
+        const w = Fan.windowFor(HUB[corner], L, AREA);
+        assert.ok(w.x >= 0 && w.y >= 0 && w.x + w.width <= 1920 && w.y + w.height <= 1040, `${corner} off screen`);
+        for (const it of [...L.items, L.more]) {
+          const x = w.hub.x + it.x, y = w.hub.y + it.y;
+          assert.ok(x - it.size / 2 >= 0 && x + it.size / 2 <= w.width && y - it.size / 2 >= 0 && y + it.size / 2 <= w.height, `${corner} item outside`);
+        }
+        // Every item on the screen itself, too (the orb is 13 px from the edges).
+        for (const it of L.items) {
+          const x = HUB[corner].x + it.x, y = HUB[corner].y + it.y;
+          assert.ok(x - it.size / 2 >= 0 && x + it.size / 2 <= 1920 && y - it.size / 2 >= 0 && y + it.size / 2 <= 1040, `${corner} item ${it.i} off screen`);
+        }
+        assert.equal(w.x + w.hub.x, HUB[corner].x);
+        assert.equal(w.y + w.hub.y, HUB[corner].y);
+        // The middle of the game stays clear: the window keeps to the corner's side of the screen.
+        assert.ok(w.width < 1920 / 2 && w.height < 1040 * 0.8, `${corner} window ${w.width}x${w.height}`);
       }
-      assert.equal(w.x + w.hub.x, HUB[corner].x);
-      assert.equal(w.y + w.hub.y, HUB[corner].y);
-      // The middle of the game stays clear: the window keeps to the corner's side of the screen.
-      assert.ok(w.width < 1920 / 2 + 80 && w.height < 1040 * 0.75, `${corner} window ${w.width}x${w.height}`);
     }
   });
 
@@ -94,7 +136,7 @@ const HUB = { tr: { x: 1920 - 24 - 52, y: 24 + 52 }, tl: { x: 24 + 52, y: 24 + 5
     assert.equal(Fan.aimAt(-100, 100, L), 2); // the middle
     assert.equal(Fan.aimAt(-10, 10, L), null); // under the dead zone
     assert.equal(Fan.aimAt(120, -60, L), null); // back toward the corner
-    // Past the middle of the rings: the outer ring.
+    // Past the inner ring: the outer ring (the page opens it).
     const far = Fan.aimAt(-L.r2, 0, L);
     assert.ok(far >= 5 && L.items[far].ring === 1);
     // From the bottom-left: up and right.
@@ -104,10 +146,11 @@ const HUB = { tr: { x: 1920 - 24 - 52, y: 24 + 52 }, tl: { x: 24 + 52, y: 24 + 5
     assert.equal(Fan.aimAt(-120, 60, B), null);
   });
 
-  await test('a stick points on its ring; the shoulder buttons move to the nearest item on the other ring', () => {
+  await test('a stick points on its ring; however hard it is pushed, it stays on the inner ring until RB', () => {
     const L = Fan.layout(12, 'tr', 1);
     assert.equal(Fan.stickAt(-1, 0, L, 0), 0); // left
     assert.equal(Fan.stickAt(0, -1, L, 0), 4); // down (y up)
+    assert.equal(Fan.stickAt(-0.98, -0.2, L, 0) < 5, true); // a hard push: still the inner ring
     assert.equal(Fan.stickAt(0.2, 0.1, L, 0), null); // let go
     assert.equal(Fan.stickAt(1, 1, L, 0), null); // up-right: away from the fan
     assert.equal(Fan.stickAt(-1, 0, L, 1), 5); // the outer ring's first
@@ -117,12 +160,46 @@ const HUB = { tr: { x: 1920 - 24 - 52, y: 24 + 52 }, tl: { x: 24 + 52, y: 24 + 5
     assert.equal(Fan.otherRing(Fan.layout(4, 'tr', 1), 1), null); // one ring
   });
 
+  await test('the outer ring opens only when asked: RB (LB back), More / Tab, or stepping past the inner ring', () => {
+    const L = Fan.layout(12, 'tr', 1);
+    // RB with nothing pointed: the ring opens, nothing is pointed (and nothing picked).
+    assert.deepEqual(Fan.bumper(L, { sel: -1, open: false }, 'rb'), { sel: -1, open: true, ring: 1 });
+    // RB on an inner item: the nearest outer one; LB back.
+    const rb = Fan.bumper(L, { sel: 2, open: false }, 'rb');
+    assert.equal(rb.open, true);
+    assert.equal(L.items[rb.sel].ring, 1);
+    const lb = Fan.bumper(L, rb, 'lb');
+    assert.equal(lb.open, false);
+    assert.equal(L.items[lb.sel].ring, 0);
+    // More (the mouse) and Tab: open, close again (an outer item pointed moves to the inner ring).
+    const t1 = Fan.toggleOuter(L, { sel: -1, open: false });
+    assert.equal(t1.open, true);
+    assert.equal(t1.sel, -1);
+    const t2 = Fan.toggleOuter(L, { sel: 8, open: true });
+    assert.equal(t2.open, false);
+    assert.ok(t2.sel < 5);
+    // Arrows: through the inner ring, then on past its end the outer ring opens on its first item.
+    let s = { sel: -1, open: false };
+    const seen = [];
+    for (let k = 0; k < 6; k++) { s = Fan.step(L, s, 1); seen.push(s.sel); }
+    assert.deepEqual(seen, [0, 1, 2, 3, 4, 5]);
+    assert.equal(s.open, true);
+    // Back from the first with it closed: the inner ring's last (the outer stays hidden).
+    assert.deepEqual(Fan.step(L, { sel: 0, open: false }, -1), { sel: 4, open: false, ring: 0 });
+    // One ring: none of this does anything.
+    const S = Fan.layout(5, 'tr', 1);
+    assert.equal(Fan.bumper(S, { sel: 1, open: false }, 'rb').open, false);
+    assert.equal(Fan.toggleOuter(S, { sel: 1, open: false }).open, false);
+    assert.deepEqual(Fan.step(S, { sel: 4, open: false }, 1), { sel: 0, open: false, ring: 0 });
+  });
+
   await test('the mouse over the fan or the orb keeps it; off to the side it doesn\'t', () => {
     const L = Fan.layout(12, 'tr', 1);
     assert.equal(Fan.inFan(0, 0, L), true); // the orb
-    assert.equal(Fan.inFan(-150, 150, L), true);
-    assert.equal(Fan.inFan(-L.reach, 10, L), true);
-    assert.equal(Fan.inFan(-(L.reach + 120), 0, L), false);
+    assert.equal(Fan.inFan(-110, 110, L), true);
+    assert.equal(Fan.inFan(-L.reachInner, 10, L, null, false), true);
+    assert.equal(Fan.inFan(-(L.reachInner + 60), 0, L, null, false), false);
+    assert.equal(Fan.inFan(-(L.reachInner + 60), 0, L, null, true), true); // the outer ring open
     assert.equal(Fan.inFan(200, -100, L), false);
   });
 
@@ -307,7 +384,7 @@ const HUB = { tr: { x: 1920 - 24 - 52, y: 24 + 52 }, tl: { x: 24 + 52, y: 24 + 5
     onSpeak: () => {}, onSpeakPref: () => {},
     onOrb: (what) => orbAsked.push(what),
   });
-  const cwin = () => wins.filter((w) => !w.destroyed && w.b.width === 520).pop();
+  const cwin = () => wins.filter((w) => !w.destroyed && w.b.width === 544).pop();
   const fromCard = (name, payload) => handlers[name]({ sender: cwin().webContents }, payload);
 
   await test('the mouse resting on the orb for about half a second opens the fan once; passing over it does not', () => {
@@ -315,8 +392,8 @@ const HUB = { tr: { x: 1920 - 24 - 52, y: 24 + 52 }, tl: { x: 24 + 52, y: 24 + 5
     card.setAway(true);
     tick(1);
     const b = cwin().getBounds();
-    fromCard('orb-hits', [{ id: 'orb', x: 520 - 104 + 20, y: 20, w: 64, h: 64 }]);
-    const on = { x: b.x + 520 - 52, y: b.y + 52 };
+    fromCard('orb-hits', [{ id: 'orb', x: 544 - 66 + 11, y: 11, w: 44, h: 44 }]);
+    const on = { x: b.x + 544 - 33, y: b.y + 33 };
     // Passing over: 3 watch ticks.
     cursor = on; tick(120);
     cursor = { x: 10, y: 900 }; tick(80);

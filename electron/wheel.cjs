@@ -127,10 +127,11 @@ function createWheel(opts) {
       const x = p.x - b.x, y = p.y - b.y;
       const hit = fanHits.find((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
       fanMouse(!!hit);
-      const i = hit && hit.id === 'item' ? hit.i : -1;
+      // (-3: the More button, which opens the outer ring when clicked)
+      const i = hit && hit.id === 'item' ? hit.i : hit && hit.id === 'more' ? -3 : -1;
       if (i !== fanOver) {
         fanOver = i;
-        send('wheel-input', { type: 'hover', i });
+        send('wheel-input', { type: 'hover', i: i === -3 ? -1 : i, more: i === -3 });
       }
       // Opened by the mouse: it goes once the mouse has left the fan (and the orb) for a moment.
       if (fan.mode === 'mouse') {
@@ -279,7 +280,7 @@ function createWheel(opts) {
   ipcMain.on('wheel-hits', (event, list) => {
     if (!win || event.sender !== win.webContents || !fan) return;
     fanHits = (Array.isArray(list) ? list : []).slice(0, 40).map((r) => ({
-      id: ['item', 'caption', 'list'].includes(r && r.id) ? r.id : 'caption', i: Number.isInteger(r && r.i) ? r.i : -1,
+      id: ['item', 'more', 'caption', 'list'].includes(r && r.id) ? r.id : 'caption', i: Number.isInteger(r && r.i) ? r.i : -1,
       x: Number(r.x) || 0, y: Number(r.y) || 0, w: Math.max(0, Number(r.w) || 0), h: Math.max(0, Number(r.h) || 0),
     }));
   });
