@@ -51,4 +51,4 @@ function register() {
   ipcMain.on('pin-opacity', (_e, v) => { const n = Number(v); if (win && !win.isDestroyed() && n >= 0.3 && n <= 1) win.setOpacity(n); });
 }
 
-module.exports = { register, close };
+module.exports = { register, close, open };

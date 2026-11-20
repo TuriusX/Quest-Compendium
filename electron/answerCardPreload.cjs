@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('qcCard', {
   action: (what) => ipcRenderer.send('card-action', String(what || '')),
   onOrb: (cb) => ipcRenderer.on('orb-state', (e, s) => cb(s || {})),
   onHover: (cb) => ipcRenderer.on('orb-hover', (e, id) => cb(String(id || ''))),
+  // The mini player on the card (Nov 20 2026): a video playing (the card's time waits) or stopped.
+  video: (on) => ipcRenderer.send('card-video', !!on),
   hits: (list) => ipcRenderer.send('orb-hits', Array.isArray(list) ? list : []),
   orb: (what) => ipcRenderer.send('orb-action', String(what || '')),
   // The quick menu's fan is out of the orb (Nov 19 2026): the orb glows brighter.

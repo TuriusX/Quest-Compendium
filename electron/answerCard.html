@@ -37,6 +37,32 @@
   .slot .img.video::after { content: ""; position: absolute; left: 50%; top: 50%; width: calc(34px * var(--s)); height: calc(34px * var(--s)); margin: calc(-17px * var(--s)) 0 0 calc(-17px * var(--s));
                             border-radius: 50%; background: color-mix(in srgb, var(--accent) 92%, transparent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 7l8 5-8 5z' fill='%2316101f'/%3E%3C/svg%3E") center / 60% no-repeat; }
   .slot .cap { font-size: calc(11.5px * var(--s)); color: var(--muted); line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* An answer's picture or video (owner, Nov 20 2026: bigger pictures, and a mini player): across the card, under the
+     answer. A picture is shown whole (a click makes it bigger, another back); a video plays right here, in the
+     youtube-nocookie player (nothing loads from YouTube until it's clicked), or goes beside the game with Pin. */
+  .media { display: flex; flex-direction: column; gap: calc(5px * var(--s)); }
+  .media .frame { position: relative; width: 100%; border-radius: calc(10px * var(--s)); overflow: hidden; background: #000; border: 1px solid rgba(255, 255, 255, .2); }
+  .media.vid .frame { aspect-ratio: 16 / 9; cursor: pointer; }
+  .media .frame img { display: block; width: 100%; }
+  /* A picture: its own shape (no bars), up to 280 high; a tall one a click makes taller (wide ones already fill the card). */
+  .media.pic .frame { align-self: center; width: auto; max-width: 100%; }
+  .media.pic .frame img { width: auto; max-width: 100%; max-height: calc(280px * var(--s)); }
+  .media.pic.tall .frame img { cursor: zoom-in; }
+  body.bigpic .media.pic .frame img { max-height: calc(430px * var(--s)); cursor: zoom-out; }
+  .media.vid .frame img { height: 100%; object-fit: cover; opacity: .92; transition: opacity .15s; }
+  .media.vid .frame:hover img { opacity: 1; }
+  .media .frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .media .play { position: absolute; left: 50%; top: 50%; width: calc(52px * var(--s)); height: calc(52px * var(--s)); margin: calc(-26px * var(--s)) 0 0 calc(-26px * var(--s));
+                 border-radius: 50%; pointer-events: none; box-shadow: 0 0 calc(22px * var(--s)) color-mix(in srgb, var(--accent) 70%, transparent);
+                 background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 7l8 5-8 5z' fill='%2316101f'/%3E%3C/svg%3E") 56% 50% / 58% no-repeat; transition: transform .15s; }
+  .media .frame:hover .play { transform: scale(1.08); }
+  .media .badge { position: absolute; bottom: calc(7px * var(--s)); font-weight: 700; font-size: calc(12px * var(--s)); background: rgba(0, 0, 0, .8); color: #fff;
+                  border-radius: 4px; padding: 1px calc(6px * var(--s)); pointer-events: none; font-variant-numeric: tabular-nums; }
+  .media .badge.len { right: calc(7px * var(--s)); }
+  .media .badge.at { left: calc(7px * var(--s)); }
+  .media .row { display: flex; align-items: center; gap: calc(8px * var(--s)); min-width: 0; }
+  .media .cap { flex: 1; min-width: 0; font-size: calc(12.5px * var(--s)); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .media .btn { font-size: calc(12px * var(--s)); padding: calc(3px * var(--s)) calc(9px * var(--s)); flex: none; }
   /* A drawn answer (drawnAnswer.ts) is the picture itself: across the card, whole (never cropped); a click makes it
      bigger, another back. Illustrations carry their label on the picture. */
   .wide { display: flex; flex-direction: column; gap: 4px; }
@@ -158,6 +184,8 @@
     <div class="intro" id="intro" hidden></div>
     <div class="warn" id="warn" hidden><span>⚠</span><span id="warnText"></span></div>
     <ol class="steps" id="steps"></ol>
+    <div class="media" id="media" hidden><div class="frame" id="mFrame"><img id="mImg" alt=""><span class="play" id="mPlay"></span><span class="badge at" id="mAt" hidden></span><span class="badge len" id="mLen" hidden></span></div>
+      <div class="row"><span class="cap" id="mCap"></span><button class="btn" id="mPin" hidden></button></div></div>
     <div class="body" id="body" hidden></div>
     <div class="foot" id="foot"><span id="hint"></span><span id="more"></span></div>
   </div>
@@ -204,8 +232,74 @@
   }
   const fmt = (s, v) => String(s || '').replace(/\{(\w+)\}/g, (m, k) => (v && v[k] != null ? v[k] : m));
 
+  // ---- The answer's picture or video, across the card (Nov 20 2026) ----
+  const mmss = (s) => { s = Math.max(0, Math.round(Number(s) || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  let playing = false;
+  /** The card's player goes (another answer, the card folding away, Pin): the card's time runs again. */
+  function stopVideo() {
+    const f = $('mFrame').querySelector('iframe');
+    if (f) f.remove();
+    $('mImg').hidden = false;
+    $('mPlay').hidden = !$('media').classList.contains('vid');
+    if (playing) { playing = false; window.qcCard.video(false); }
+  }
+  function playVideo() {
+    const p = cur && cur.picture;
+    if (!p || !p.videoId || playing) return;
+    const f = document.createElement('iframe');
+    f.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(p.videoId)}?start=${p.start || 0}&rel=0&modestbranding=1&autoplay=1&playsinline=1`;
+    f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    f.title = p.title || '';
+    $('mFrame').append(f);
+    $('mImg').hidden = true;
+    $('mPlay').hidden = true;
+    $('mAt').hidden = true;
+    $('mLen').hidden = true;
+    playing = true;
+    window.qcCard.video(true);
+  }
+  /** The sharpest thumbnail YouTube has (1280 wide when there is one; the 120-wide grey stand-in means there isn't). */
+  function videoThumb(id) {
+    const img = $('mImg');
+    img.onload = () => { if (img.naturalWidth <= 120 && /maxresdefault/.test(img.src)) img.src = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`; report(); };
+    img.onerror = () => { if (/maxresdefault/.test(img.src)) img.src = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`; };
+    img.src = `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`;
+  }
+  function setMedia(p) {
+    const m = $('media');
+    const show = !!(p && p.url && !p.wide);
+    const key = show ? `${p.videoId || ''}|${p.url}` : '';
+    if (m.dataset.key === key) { m.hidden = !show || (expanded && !playing); return; } // the same one (an update): a playing video goes on
+    stopVideo();
+    m.dataset.key = key;
+    m.hidden = !show;
+    document.body.classList.remove('bigpic');
+    if (!show) { $('mImg').removeAttribute('src'); return; }
+    const vid = !!p.videoId;
+    m.classList.toggle('vid', vid || !!p.video);
+    m.classList.toggle('pic', !vid && !p.video);
+    $('mPlay').hidden = !(vid || p.video);
+    $('mCap').textContent = vid && p.title ? `${p.title} · ${p.credit || 'YouTube'}` : p.credit || '';
+    $('mLen').hidden = !(vid && p.seconds);
+    $('mLen').textContent = vid ? mmss(p.seconds) : '';
+    $('mAt').hidden = !(vid && p.start > 0);
+    $('mAt').textContent = vid ? fmt(S.startsAt || 'Starts at {time}', { time: mmss(p.start) }) : '';
+    // Pin: the video, or a picture from the web (not one of the player's own screen), in the window beside the game.
+    $('mPin').hidden = !(vid || (!p.video && /^https:\/\//.test(p.url)));
+    m.classList.remove('tall');
+    $('mPin').textContent = S.pin || 'Pin';
+    $('mPin').title = S.pinTitle || '';
+    $('mFrame').title = vid ? fmt(S.play || 'Play: {title}', { title: p.title || '' }) : '';
+    const img = $('mImg');
+    if (vid) videoThumb(p.videoId);
+    else { img.onload = () => { m.classList.toggle('tall', img.naturalHeight > img.naturalWidth * 0.62); report(); }; img.onerror = null; img.src = p.url; }
+  }
+
   function setPicture(p) {
     const slot = $('slot');
+    // Only the screenshot while thinking stays small, beside the question; an answer's picture goes across (setMedia).
+    setMedia(p && !p.small ? p : null);
+    if (p && !p.small && !p.wide) p = null;
     // A drawn answer: across the card, whole.
     const wide = !!(p && p.url && p.wide);
     $('wide').hidden = !wide;
@@ -273,7 +367,7 @@
     $('q').textContent = d.question || '';
     $('title').textContent = '';
     $('title').hidden = true;
-    setPicture(d.screen ? { url: d.screen, credit: S.yourScreen } : null);
+    setPicture(d.screen ? { url: d.screen, credit: S.yourScreen, small: true } : null);
     $('warn').hidden = true;
     $('intro').hidden = true;
     $('sum').hidden = true;
@@ -369,6 +463,7 @@
     document.body.classList.remove('expanded', 'fight', 'answer');
     cardParts(true);
     for (const id of ['stages', 'sum', 'intro', 'warn', 'body', 'wide']) $(id).hidden = true;
+    setMedia(null);
     $('steps').innerHTML = '';
     const combo = S.combo || 'L3 + R3';
     $('line').textContent = S.askKeys ? fmt(S.orbHint, { keys: S.askKeys, combo }) : fmt(S.orbHintPad, { combo });
@@ -388,7 +483,10 @@
       $('intro').hidden = true;
       $('sum').hidden = true;
       b.hidden = false;
-      b.style.maxHeight = `${Math.max(120, (cur.maxHeight || 600) - 190)}px`;
+      // The whole answer to read: the picture makes room (a playing video stays, and the text is shorter).
+      $('media').hidden = !playing;
+      document.body.classList.remove('bigpic');
+      b.style.maxHeight = `${Math.max(120, (cur.maxHeight || 600) - 190 - (playing ? $('media').offsetHeight + 12 : 0))}px`;
       b.scrollTop = 0;
     } else if (partInfo().more) {
       b.scrollTop += b.clientHeight - 4;
@@ -781,6 +879,7 @@
     if (!t.paused) requestAnimationFrame(() => { bar.style.transition = `transform ${t.left}ms linear`; bar.style.transform = 'scaleX(0)'; });
   });
   window.qcCard.onHide(() => {
+    stopVideo();
     document.body.classList.remove('on');
     if (O.on) foldMorph();
     else hits();
@@ -796,6 +895,15 @@
   $('bSpeak').addEventListener('click', () => window.qcCard.action('speak'));
   $('wideImg').addEventListener('click', () => { document.body.classList.toggle('bigpic'); report(); });
   $('wideImg').addEventListener('load', () => report());
+  // The mini player: a click on the video plays it here; on a picture, bigger and back.
+  $('mFrame').addEventListener('click', () => {
+    const p = cur && cur.picture;
+    if (!p) return;
+    if (p.videoId) playVideo();
+    else if (p.video) window.qcCard.action('open');
+    else if ($('media').classList.contains('tall')) { document.body.classList.toggle('bigpic'); report(); }
+  });
+  $('mPin').addEventListener('click', (e) => { e.stopPropagation(); window.qcCard.action('pin'); stopVideo(); });
   // With the orb, the answer's text opens the panel at it (owner, Nov 19 2026: the panel comes only when asked for).
   for (const id of ['sum', 'title', 'intro', 'steps']) $(id).addEventListener('click', () => { if (O.on && cur && cur.state === 'answer') window.qcCard.action('open'); });
   $('body').addEventListener('click', () => { if (O.on && cur && cur.state === 'answer' && !expanded) window.qcCard.action('open'); });

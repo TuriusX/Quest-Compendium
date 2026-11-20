@@ -624,6 +624,7 @@ export function ControllerLayer({
           yourScreen: t('card.yourScreen'), more: t('card.more'), open: t('card.open'), moreBelow: t('card.moreBelow'), part: t('card.part'),
           padMore: t('card.padMore'), padOpen: t('card.padOpen'), keysOpen: t('card.keysOpen'), combo: comboLabel,
           mute: t('card.mute'), unmute: t('card.unmute'),
+          play: t('visual.play'), pin: t('visual.pin'), pinTitle: t('visual.pinTitle'), startsAt: t('visual.startsAt'),
           // The orb in the card's corner (Nov 19 2026): its menu, its tooltip and its how-to-ask line.
           orbOpen: t('orb.open'), orbLog: t('orb.log'), orbAsk: t('orb.ask'), orbMute: t('orb.mute'), orbHide: t('orb.hide'), orbTip: t('orb.tip'),
           orbHint: t('orb.hint'), orbHintPad: t('orb.hintPad'),

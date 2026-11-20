@@ -89,7 +89,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     id: String(a.id || ''), question: String(a.question || ''), title: String(a.title || ''), text: String(a.text || ''),
     steps: Array.isArray(a.steps) ? a.steps.slice(0, 8).map((s) => ({ kind: String((s && s.kind) || 'step'), label: String((s && s.label) || ''), where: String((s && s.where) || '') })) : [],
     model: String(a.model || ''), place: String(a.place || ''), combat: !!a.combat, hintNext: String(a.hintNext || ''), summary: String(a.summary || ''),
-    picture: a.picture && typeof a.picture.url === 'string' ? { url: a.picture.url, credit: String(a.picture.credit || ''), video: !!a.picture.video, wide: !!a.picture.wide, tag: String(a.picture.tag || '') } : null,
+    picture: a.picture && typeof a.picture.url === 'string' ? { url: a.picture.url, credit: String(a.picture.credit || ''), video: !!a.picture.video, wide: !!a.picture.wide, tag: String(a.picture.tag || ''), videoId: String(a.picture.videoId || ''), start: Number(a.picture.start) || 0, seconds: Number(a.picture.seconds) || 0, title: String(a.picture.title || '') } : null,
   } : null),
   // Asked from the panel while a game runs: the panel slides away and the answer pops up over the game.
   askOverGame: (a) => ipcRenderer.send('ask-over-game', a && typeof a === 'object' ? { question: String(a.question || ''), mode: String(a.mode || 'keys'), screen: typeof a.screen === 'string' ? a.screen : undefined } : {}),

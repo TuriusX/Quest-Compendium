@@ -1199,7 +1199,7 @@ export default function App() {
         ...(dr.on === 'illustration' ? { tag: tr('drawn.illustration') } : {}),
       }
         : v?.kind === 'picture' && v.source !== 'ours' ? { url: v.url, credit: v.credit || v.page?.site || '' }
-        : v?.kind === 'video' ? { url: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`, credit: v.channel || 'YouTube', video: true }
+        : v?.kind === 'video' ? { url: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`, credit: v.channel || 'YouTube', video: true, videoId: v.videoId, start: v.start, seconds: v.seconds, title: v.title }
         : closeUp ? { url: closeUp, credit: tr('card.yourScreen') }
         : null;
     const sig = last && last.role === 'assistant' ? `${last.id}:${(last.text || '').length}:${picture?.url.slice(-40) || ''}:${last.hintShown || 0}` : '';

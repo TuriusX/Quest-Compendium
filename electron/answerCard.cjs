@@ -56,7 +56,14 @@ function readingMs(text, hasWarning) {
 
 // A drawn answer (wide: shown across the card, whole) may be a data URL of a few hundred KB; tag: "Illustration".
 const pictureOf = (p) => (p && typeof p.url === 'string' && p.url
-  ? { url: p.url, credit: String(p.credit || '').slice(0, 120), video: !!p.video, ...(p.wide ? { wide: true, tag: String(p.tag || '').slice(0, 40) } : {}) }
+  ? {
+      url: p.url, credit: String(p.credit || '').slice(0, 120), video: !!p.video,
+      ...(p.wide ? { wide: true, tag: String(p.tag || '').slice(0, 40) } : {}),
+      // A video plays on the card itself (Nov 20 2026): its id, where to start, its length and title.
+      ...(p.video && /^[\w-]{6,20}$/.test(String(p.videoId || ''))
+        ? { videoId: String(p.videoId), start: Math.max(0, Math.round(Number(p.start) || 0)), seconds: Math.max(0, Math.round(Number(p.seconds) || 0)), title: String(p.title || '').slice(0, 200) }
+        : {}),
+    }
   : null);
 
 /**
@@ -84,6 +91,7 @@ function createAnswerCard(opts) {
   let endsAt = 0;
   let pausedLeft = 0;
   let mouseOver = false;
+  let videoOn = false; // a video plays on the card (Nov 20 2026): its time waits until it stops
   // The orb's mouse: the parts of the page the mouse may reach ({ id, x, y, w, h }, window coordinates), what it's over
   // now, whether the window takes the mouse (null: unknown, right after a show), and when it last was over the menu.
   let hits = [];
@@ -319,6 +327,7 @@ function createAnswerCard(opts) {
     shownAt = 0;
     thinkingNow = null;
     pausedLeft = 0;
+    videoOn = false;
     send('card-hide', {});
     if (wasShown) dispatch({ type: 'fold', reason }); // (the orb off: only its state, nothing on screen)
     if (orb.on) {
@@ -355,7 +364,7 @@ function createAnswerCard(opts) {
     send('card-timer', { left: pausedLeft, total, paused: true });
   }
   function resume() {
-    if (!shownAt || !pausedLeft || mouseOver || speakingNow) return;
+    if (!shownAt || !pausedLeft || mouseOver || speakingNow || videoOn) return;
     const left = pausedLeft;
     pausedLeft = 0;
     endsAt = Date.now() + left;
@@ -401,6 +410,24 @@ function createAnswerCard(opts) {
     if (what === 'hint' && current && current.hintNext) opts.onAction('hint', current);
     // The speaker button: reading the summary aloud off (it stops now) or on again (it reads this one).
     if (what === 'speak') toggleSpeak(true);
+    // Pin beside the game (pin.cjs): the video goes on in its own small window (the card's player has stopped).
+    const p = current && current.picture;
+    if (what === 'pin' && p && p.videoId) require('./pin.cjs').open({ kind: 'video', videoId: p.videoId, start: p.start, title: p.title });
+    else if (what === 'pin' && p && !p.video && !p.wide && /^https:\/\//.test(p.url)) require('./pin.cjs').open({ kind: 'picture', url: p.url, title: p.credit });
+  });
+  // The mini player (Nov 20 2026): while a video plays the card stays (its time waits; reading aloud stops). Stopped,
+  // the card has at least 15 s more.
+  ipcMain.on('card-video', (event, on) => {
+    if (!fromCard(event) || !shownAt) return;
+    if (on && !videoOn) {
+      videoOn = true;
+      if (speakingNow) stopSpeaking();
+      pause();
+    } else if (!on && videoOn) {
+      videoOn = false;
+      if (pausedLeft) pausedLeft = Math.max(pausedLeft, 15000);
+      resume();
+    }
   });
   // The orb's parts the mouse may reach (window coordinates), as the page lays them out.
   ipcMain.on('orb-hits', (event, list) => {
