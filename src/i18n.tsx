@@ -446,6 +446,7 @@ const en: Dict = {
   "tracker.whereNo": "No",
   "tracker.whereLast": "Last time: {place}",
   "tracker.whereStill": "Still here",
+  "tracker.whereOther": "Other…",
   "tracker.wherePick": "Pick from the guide's areas",
   "tracker.youreIn": "You're in",
   "tracker.change": "Change",

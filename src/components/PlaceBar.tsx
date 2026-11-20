@@ -52,9 +52,7 @@ export function PlaceBar({
   const askStory = !!place.story && open;
 
   const btn =
-    'h-8 px-3 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 max-w-full';
-  const guessBtn = `${btn} bg-[var(--accent-dim)] border-[var(--accent-border)] text-zinc-100 hover:brightness-125`;
-  const otherBtn = `${btn} bg-white/[0.04] border-white/10 text-zinc-200 hover:bg-white/[0.08]`;
+    'h-7 px-2.5 rounded-md border text-[12px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 max-w-full';
   const say = (
     <button
       type="button"
@@ -79,21 +77,6 @@ export function PlaceBar({
     </button>
   ) : null;
   const note = locateNote ? <div className="basis-full text-[11px] text-amber-300/90">{locateNote}</div> : null;
-  const choices = (list: string[], pick: (v: string) => void, closes: boolean) =>
-    list.map((v, i) => (
-      <button
-        key={v}
-        type="button"
-        onClick={() => {
-          pick(v);
-          if (closes) setOpen(false);
-        }}
-        className={i === 0 ? guessBtn : otherBtn}
-      >
-        {i === 0 && <Check className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />}
-        <span className="truncate">{v}</span>
-      </button>
-    ));
 
   // The answer was based on a different place or story point than the one picked: offer to answer again.
   const placeChanged = msg.placeChosen && !same(msg.placeChosen, place.name);
@@ -146,41 +129,52 @@ export function PlaceBar({
     );
   }
 
-  return (
-    <div className="mb-3 p-3 rounded-xl bg-[var(--accent-dim)] border-2 border-[var(--accent-border)] space-y-3" role="group" aria-label={t('place.where')}>
-      {askPlace && (
-        <div>
-          <div className="flex items-center gap-2 text-[12px] text-zinc-300 mb-2">
-            <MapPin className="w-3.5 h-3.5 text-[var(--accent-color)]" aria-hidden="true" />
-            <span className="font-semibold text-white">{t('place.where')}</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {choices([place.name, ...(place.options || [])], onChoosePlace, !askStory)}
-            {say}
-            {locate}
-            {note}
-          </div>
-        </div>
-      )}
-      {askStory && (
-        <div>
-          <div className="flex items-center gap-2 text-[12px] text-zinc-300 mb-2">
-            <BookOpen className="w-3.5 h-3.5 text-[var(--accent-color)]" aria-hidden="true" />
-            <span className="font-semibold text-white">{t('place.when')}</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {choices([place.story as string, ...(place.storyOptions || [])].map((s) => storyPhrase(s)), onChooseStory, true)}
-            {!askPlace && say}
-          </div>
-        </div>
-      )}
-      <div className="flex items-center gap-2 text-[11px] text-zinc-400">
-        <span className="flex-1">{t('place.hint')}</span>
-        {open && (
-          <button type="button" onClick={() => setOpen(false)} className="text-zinc-400 hover:text-white cursor-pointer">
-            {t('common.cancel')}
+  // The answer couldn't tell the place (owner, Nov 19 2026, idea #2: the box was too big): one line with its guess,
+  // "Looks like X?  Yes · No", and Help me here; No (or Change) opens the small chooser below.
+  const small = 'h-6 px-2 rounded-md text-[11.5px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1';
+  if (!open) {
+    return (
+      <div className="mb-3">
+        <div className="flex items-center gap-2 text-[12px] min-w-0 flex-wrap" role="group" aria-label={t('place.where')}>
+          <span className="inline-flex items-center gap-1.5 min-w-0">
+            <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-color)]" aria-hidden="true" />
+            <span className="text-zinc-200 truncate">{t('tracker.whereLooksLike', { place: place.name })}</span>
+          </span>
+          <button type="button" onClick={() => onChoosePlace(place.name)}
+            className={`${small} flex-shrink-0 border border-[var(--accent-border)] bg-[var(--accent-dim)] text-zinc-100 hover:brightness-125`}>
+            <Check className="w-3.5 h-3.5" aria-hidden="true" />{t('tracker.whereYes')}
           </button>
-        )}
+          <button type="button" onClick={() => setOpen(true)} className={`${small} flex-shrink-0 text-[var(--accent-color)] hover:bg-[var(--accent-dim)]`}>
+            {t('tracker.whereNo')}
+          </button>
+          {locate && <span className="ml-auto flex-shrink-0">{locate}</span>}
+        </div>
+        {note}
+      </div>
+    );
+  }
+
+  // The chooser: the guess and the other likely places (and, with a story guess, when in the story), Say it, Help me here.
+  const chip = 'h-7 px-2.5 rounded-md border text-[12px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 max-w-full';
+  const row = (icon: React.ReactNode, label: string, list: string[], pickFn: (v: string) => void, closes: boolean, extra?: React.ReactNode) => (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 text-[11.5px] text-zinc-400 mr-0.5">{icon}{label}</span>
+      {list.map((v, i) => (
+        <button key={v} type="button" onClick={() => { pickFn(v); if (closes) setOpen(false); }}
+          className={`${chip} ${i === 0 ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-zinc-100 hover:brightness-125' : 'bg-white/[0.04] border-white/10 text-zinc-200 hover:bg-white/[0.08]'}`}>
+          <span className="truncate">{v}</span>
+        </button>
+      ))}
+      {extra}
+    </div>
+  );
+  return (
+    <div className="mb-3 px-2.5 py-2 rounded-lg bg-[var(--accent-dim)]/50 border border-[var(--accent-border)] space-y-1.5" role="group" aria-label={t('place.where')}>
+      {row(<MapPin className="w-3.5 h-3.5 text-[var(--accent-color)]" aria-hidden="true" />, t('place.where'), [place.name, ...(place.options || [])], onChoosePlace, !askStory, <>{say}{locate}</>)}
+      {askStory && row(<BookOpen className="w-3.5 h-3.5 text-[var(--accent-color)]" aria-hidden="true" />, t('place.when'), [place.story as string, ...(place.storyOptions || [])].map((s) => storyPhrase(s)), onChooseStory, true)}
+      <div className="flex items-center">
+        {note}
+        <button type="button" onClick={() => setOpen(false)} className="ml-auto text-[11.5px] text-zinc-400 hover:text-white cursor-pointer">{t('common.cancel')}</button>
       </div>
     </div>
   );

@@ -70,6 +70,7 @@ export function QuestLog(p: QuestLogProps) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [noSuggestion, setNoSuggestion] = useState('');
+  const [pickFilter, setPickFilter] = useState('');
   const root = useRef<HTMLDivElement>(null);
 
   // A new place: the guide's lists and details fold again.
@@ -143,7 +144,7 @@ export function QuestLog(p: QuestLogProps) {
   // Locate me (owner, Oct 31 2026): big and obvious, on its shortcut and the controller too. It looks at the screen.
   const locateBtn = (big: boolean) => p.onLocate ? (
     <button type="button" data-qc-locate="" onClick={p.onLocate} disabled={!!(w?.locating || v.locating)}
-      title={`${t('tracker.locate')}${p.locateKeys ? ` (${p.locateKeys})` : ''}`}
+      title={`${t('tracker.locate')}${p.locateKeys ? ` (${p.locateKeys})` : ''}${w ? `: ${t('tracker.whereSub')}` : ''}`}
       className={`flex items-center justify-center gap-2 rounded-md font-bold outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-70 ${
         big ? 'w-full h-11 text-[15px] bg-[var(--accent-color)] text-black hover:brightness-110' : 'flex-shrink-0 h-7 px-2.5 text-[12px] border border-[var(--accent-border)] text-[var(--accent-color)] hover:bg-[var(--accent-color)] hover:text-black'
       }`}>
@@ -152,15 +153,23 @@ export function QuestLog(p: QuestLogProps) {
       {big && p.locateKeys && !w?.locating && <kbd className="qc-log-kbd !text-black/70 !border-black/30 !bg-black/10">{p.locateKeys}</kbd>}
     </button>
   ) : null;
+  const shown = pickFilter.trim() ? pickNames.filter((n) => n.toLowerCase().includes(pickFilter.trim().toLowerCase())) : pickNames;
   const picker = picking && pickNames.length > 0 && p.onPickPlace ? (
-    <ul className="mt-2 max-h-[180px] overflow-y-auto rounded border border-white/10 bg-black/30 py-1" style={{ scrollbarWidth: 'thin' }}>
-      {pickNames.map((name) => (
+    <div className="mt-1.5 rounded border border-white/10 bg-black/30">
+    {pickNames.length > 8 && (
+      <input autoFocus value={pickFilter} onChange={(e) => setPickFilter(e.target.value)} placeholder={t('tracker.wherePick')} aria-label={t('tracker.wherePick')}
+        onKeyDown={(e) => { if (e.key === 'Enter' && shown[0]) { e.preventDefault(); pick(shown[0]); } if (e.key === 'Escape') setPicking(false); }}
+        className="w-full h-7 px-2.5 bg-transparent border-b border-white/10 text-[12.5px] text-white placeholder:text-zinc-500 outline-none focus:border-[var(--accent-border)]" />
+    )}
+    <ul className="max-h-[180px] overflow-y-auto py-1" style={{ scrollbarWidth: 'thin' }}>
+      {shown.map((name) => (
         <li key={name} ref={name === place?.name ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}>
           <button type="button" onClick={() => pick(name)}
             className={`w-full text-left px-2.5 py-1 text-[12.5px] hover:bg-white/[0.06] hover:text-white outline-none focus-visible:bg-white/[0.08] ${name === place?.name ? 'text-[var(--accent-color)] font-semibold' : 'text-zinc-300'}`}>{name}</button>
         </li>
       ))}
     </ul>
+    </div>
   ) : null;
 
   return (
@@ -204,43 +213,43 @@ export function QuestLog(p: QuestLogProps) {
           {picker}
         </div>
       )}
+      {/* The place isn't known (owner, Nov 19 2026, idea #2: the box was too big): one slim line. The guess or the last
+          place with its answer buttons right there; the chip itself opens the guide's areas to pick from. Nothing from
+          the guide shows below until the place is known (never the start of the guide). */}
+      {w && (
+        <div className="px-3.5 pt-2.5">
+          <div data-qc-log-where="" className="flex items-center gap-2 min-w-0 rounded-md border border-[var(--accent-border)] bg-[var(--accent-dim)]/40 pl-2.5 pr-1 py-1">
+            <MapPin className="w-4 h-4 flex-shrink-0 text-[var(--accent-color)]" />
+            <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap text-[13px] leading-tight">
+              {w.locating ? (
+                <span className="text-zinc-300">{t('tracker.locatingBig')}</span>
+              ) : suggestion && p.onPickPlace ? (
+                <>
+                  <span className="text-zinc-200 truncate">{t('tracker.whereLooksLike', { place: suggestion })}</span>
+                  <button type="button" onClick={() => pick(suggestion)} className="px-1.5 py-px rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-[12px] font-bold hover:bg-emerald-500/30 outline-none focus-visible:ring-2 focus-visible:ring-white">{t('tracker.whereYes')}</button>
+                  <button type="button" onClick={() => { setNoSuggestion(suggestion); setPicking(true); }} className="px-1.5 py-px rounded border border-white/15 text-zinc-300 text-[12px] font-bold hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white">{t('tracker.whereNo')}</button>
+                </>
+              ) : w.last && p.onPickPlace ? (
+                <>
+                  <span className="text-zinc-400 truncate">{t('tracker.whereLast', { place: w.last })}</span>
+                  <button type="button" onClick={() => pick(w.last!)} className="px-1.5 py-px rounded border border-white/15 text-zinc-200 text-[12px] font-semibold hover:text-white hover:border-[var(--accent-border)] outline-none focus-visible:ring-2 focus-visible:ring-white">{t('tracker.whereStill')}</button>
+                  {pickNames.length > 0 && <button type="button" onClick={() => setPicking((x) => !x)} aria-expanded={picking} className="text-[12px] font-semibold text-[var(--accent-color)] hover:underline outline-none focus-visible:underline">{t('tracker.whereOther')}</button>}
+                </>
+              ) : p.onPickPlace && pickNames.length > 0 ? (
+                <button type="button" onClick={() => setPicking((x) => !x)} aria-expanded={picking} title={t('tracker.wherePick')}
+                  className="font-bold text-white hover:text-[var(--accent-color)] outline-none focus-visible:underline">{t('tracker.whereTitle')}</button>
+              ) : (
+                <span className="font-bold text-white">{t('tracker.whereTitle')}</span>
+              )}
+            </div>
+            {locateBtn(false)}
+          </div>
+          {picker}
+        </div>
+      )}
       {v.notice && <div className="px-3.5 pt-1 text-[11.5px] text-amber-300">{v.notice}</div>}
 
       <div className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-3 pb-2 flex flex-col gap-4" style={{ scrollbarWidth: 'thin' }}>
-        {/* The place isn't known: nothing from the guide, only "Where are you?" (never the start of the guide). */}
-        {w && (
-          <div data-qc-log-where="" className="rounded-md border border-[var(--accent-border)] bg-[var(--accent-dim)]/50 p-3.5 flex flex-col gap-2.5">
-            <div>
-              <div className="font-bold text-[17px] text-white flex items-center gap-1.5"><MapPin className="w-4 h-4 text-[var(--accent-color)]" />{t('tracker.whereTitle')}</div>
-              <p className="mt-1 text-[12.5px] text-zinc-400 leading-snug">{t('tracker.whereSub')}</p>
-            </div>
-            {locateBtn(true)}
-            {suggestion && p.onPickPlace && !w.locating && (
-              <div className="flex items-center gap-1.5 flex-wrap text-[13px] text-zinc-200">
-                <span>{t('tracker.whereLooksLike', { place: suggestion })}</span>
-                <button type="button" onClick={() => pick(suggestion)} className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-[12px] font-bold hover:bg-emerald-500/30 outline-none focus-visible:ring-2 focus-visible:ring-white">{t('tracker.whereYes')}</button>
-                <button type="button" onClick={() => { setNoSuggestion(suggestion); setPicking(true); }} className="px-2 py-0.5 rounded border border-white/15 text-zinc-300 text-[12px] font-bold hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white">{t('tracker.whereNo')}</button>
-              </div>
-            )}
-            {w.last && w.last !== suggestion && p.onPickPlace && !w.locating && (
-              <div className="flex items-center gap-1.5 flex-wrap text-[12.5px] text-zinc-400">
-                <span>{t('tracker.whereLast', { place: w.last })}</span>
-                <button type="button" onClick={() => pick(w.last!)} className="px-2 py-0.5 rounded border border-white/15 text-zinc-200 text-[12px] font-semibold hover:text-white hover:border-[var(--accent-border)] outline-none focus-visible:ring-2 focus-visible:ring-white">{t('tracker.whereStill')}</button>
-              </div>
-            )}
-            {p.onPickPlace && pickNames.length > 0 && (
-              <button type="button" onClick={() => setPicking((x) => !x)} aria-expanded={picking}
-                className="self-start text-[12.5px] font-semibold text-[var(--accent-color)] hover:underline outline-none focus-visible:underline">{t('tracker.wherePick')}</button>
-            )}
-            {picker}
-            <div className="flex flex-wrap gap-1.5 pt-1 border-t border-white/[0.07]">
-              {[t('tracker.logQuick1'), t('tracker.logQuick2')].map((q) => (
-                <button key={q} type="button" onClick={() => p.onAsk(q)}
-                  className="mt-1.5 px-2 py-1 rounded border border-white/15 bg-[#121119] text-[12px] font-mono text-zinc-300 hover:border-[var(--accent-border)] hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white">{q}</button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Nothing asked yet and nothing else to show: an invitation (the area's steps carry the same quick questions). */}
         {v.invite && !v.done && !w && !v.here && !p.facts && (

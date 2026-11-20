@@ -361,10 +361,13 @@
   .lbtn { display: inline-block; margin-top: .35em; cursor: pointer; color: var(--accent); font-weight: 700; font-size: .85em;
     border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 3px; padding: .05em .5em; background: rgba(16,12,28,.6); text-shadow: none; }
   .lbtn:hover { background: var(--accent); color: #16101f; }
-  .lwhere { padding: .6em .65em; border-radius: .4em; border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); background: rgba(10,8,18,.6); display: flex; flex-direction: column; gap: .45em; }
-  .lwhere .lt { font-weight: 800; color: #fff; font-size: 1.12em; }
-  .lwhere .ls { font-size: .82em; color: var(--dim); }
-  .lwhere .lq { font-size: .88em; color: #e4e4e7; }
+  .lwhere { padding: .3em .35em .3em .55em; border-radius: .4em; border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); background: rgba(10,8,18,.6); display: flex; align-items: center; gap: .45em; }
+  .lwhere .wm { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .35em; font-size: .92em; color: #e4e4e7; }
+  .lwhere .wt.b { font-weight: 800; color: #fff; cursor: pointer; }
+  .lwhere .wt.dim { color: var(--dim); }
+  .lwhere .wl { color: var(--accent); font-weight: 700; cursor: pointer; font-size: .92em; }
+  .lwhere .wl:hover, .lwhere .wt.b:hover { text-decoration: underline; }
+  .lwhere > .lbtn { flex-shrink: 0; }
   .lhere { display: flex; flex-direction: column; gap: .3em; }
   .lhere > .ls { font-size: .8em; color: var(--dim); margin-bottom: .2em; }
   .lhere .lwatch { margin-top: .35em; }
@@ -493,7 +496,7 @@
     itemTodo: 'Click: collected', itemDone: 'Click: not collected yet',
     empty: 'Nothing to track here yet', secAnswer: 'From your last answer', secMissable: 'Missable here',
     locatingBig: 'Looking at your screen…', whereTitle: 'Where are you?', whereSub: 'Help me here looks at your screen (the map, your journal, place names) to find where you are in the guide, sets what you are doing as Now, and finds a video or picture for it.',
-    whereLooksLike: 'Looks like {place}?', whereYes: 'Yes', whereNo: 'No', whereLast: 'Last time: {place}', whereStill: 'Still here', wherePick: "Pick from the guide's areas",
+    whereLooksLike: 'Looks like {place}?', whereYes: 'Yes', whereNo: 'No', whereLast: 'Last time: {place}', whereStill: 'Still here', whereOther: 'Other…', wherePick: "Pick from the guide's areas",
     inPlace: 'In {place}', hereSub: "What you're doing here isn't clear yet. Ask a question, or press Help me here with your journal or objective on screen.", seenOnScreen: 'On your screen: {what}', fromGuideStep: 'Step details: {step}',
     secNoReturn: 'Point of no return', secCollect: 'To collect', secAch: 'Achievements here', more: '+{n} more',
     next: 'Next: {area}', closest: '{area} (closest match)', showHidden: 'Show {n} hidden', hideEntry: 'Hide',
@@ -623,17 +626,19 @@
     const box = (s) => `<span class="lbox${s.tick ? '' : ' no'}" data-tick="${esc(s.id)}" title="${esc(L('logTick'))}"></span>`;
     const sub = (s) => (s.sub ? `<span class="ls">${esc(s.sub)}</span>` : '');
     let h = '';
-    // The place isn't known: "Where are you?" with a big Locate me (never the start of the guide).
+    // The place isn't known (owner, Nov 19 2026, idea #2): one slim line, the guess or last place with its buttons, and
+    // Help me here at its end; the line opens the guide's areas to pick from (never the start of the guide).
     const w = lg.where;
     if (w) {
       const sug = w.suggestion && w.suggestion !== state.noSuggestion ? w.suggestion : '';
-      h += `<div class="lwhere"><div class="lt">📍 ${esc(L('whereTitle'))}</div><div class="ls">${esc(L('whereSub'))}</div>
-        <span class="lbig${w.locating ? ' busy' : ''}" data-act="locate">⌖ ${esc(w.locating ? L('locatingBig') : L('locate'))}</span>`;
-      if (sug && !w.locating) h += `<div class="lq">${esc(L('whereLooksLike').replace('{place}', sug))} <span class="lbtn" data-pick="${esc(sug)}">${esc(L('whereYes'))}</span> <span class="lbtn ghost" data-act="where-no" data-name="${esc(sug)}">${esc(L('whereNo'))}</span></div>`;
-      if (w.last && w.last !== sug && !w.locating) h += `<div class="lq">${esc(L('whereLast').replace('{place}', w.last))} <span class="lbtn ghost" data-pick="${esc(w.last)}">${esc(L('whereStill'))}</span></div>`;
-      if (w.areas && w.areas.length) h += `<div class="lrow" data-act="where-list">${esc(L('wherePick'))}<span class="c">${state.whereOpen ? '▾' : '▸'}</span></div>`;
-      if (state.whereOpen) h += `<div class="lareas">${w.areas.map((a) => `<div data-pick="${esc(a)}">${esc(a)}</div>`).join('')}</div>`;
-      h += `</div>`;
+      const list = w.areas && w.areas.length;
+      let mid;
+      if (w.locating) mid = `<span class="wt">${esc(L('locatingBig'))}</span>`;
+      else if (sug) mid = `<span class="wt">${esc(L('whereLooksLike').replace('{place}', sug))}</span> <span class="lbtn" data-pick="${esc(sug)}">${esc(L('whereYes'))}</span> <span class="lbtn ghost" data-act="where-no" data-name="${esc(sug)}">${esc(L('whereNo'))}</span>`;
+      else if (w.last) mid = `<span class="wt dim">${esc(L('whereLast').replace('{place}', w.last))}</span> <span class="lbtn ghost" data-pick="${esc(w.last)}">${esc(L('whereStill'))}</span>${list ? ` <span class="wl" data-act="where-list">${esc(L('whereOther'))}</span>` : ''}`;
+      else mid = `<span class="wt b"${list ? ' data-act="where-list"' : ''}>${esc(L('whereTitle'))}${list ? ` <span class="c">${state.whereOpen ? '▾' : '▸'}</span>` : ''}</span>`;
+      h += `<div class="lwhere"><span class="wp">📍</span><div class="wm">${mid}</div><span class="lbtn${w.locating ? ' busy' : ''}" data-act="locate" title="${esc(L('whereSub'))}">⌖ ${esc(L('locate'))}</span></div>`;
+      if (state.whereOpen && list) h += `<div class="lareas">${w.areas.map((a) => `<div data-pick="${esc(a)}">${esc(a)}</div>`).join('')}</div>`;
     }
     if (lg.invite && !lg.now && !lg.done && !w) h += `<div class="linvite"><div class="lt">${esc(L('logInvite'))}</div><div class="ls">${esc(L('logInviteSub'))}</div><span class="lbtn" data-act="ask">${esc(L('logAsk'))}</span></div>`;
     if (lg.done) h += `<div class="ldone"><div class="lt">✓ ${esc(L('logDone', { goal: lg.done.goal }))}</div><span class="lbtn" data-act="whats-next">${esc(L('logWhatsNext'))}</span></div>`;
