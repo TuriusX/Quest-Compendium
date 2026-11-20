@@ -15,4 +15,6 @@ contextBridge.exposeInMainWorld('qcCard', {
   onHover: (cb) => ipcRenderer.on('orb-hover', (e, id) => cb(String(id || ''))),
   hits: (list) => ipcRenderer.send('orb-hits', Array.isArray(list) ? list : []),
   orb: (what) => ipcRenderer.send('orb-action', String(what || '')),
+  // The quick menu's fan is out of the orb (Nov 19 2026): the orb glows brighter.
+  onFan: (cb) => ipcRenderer.on('orb-fan', (e, on) => cb(!!on)),
 });

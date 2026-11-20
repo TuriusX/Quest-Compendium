@@ -198,7 +198,9 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
     fromPage('orb-action', 'menu');
     assert.equal(lastOrb().menu, true);
     fromPage('orb-action', 'ask');
-    assert.deepEqual(orbAsked, ['ask']);
+    // (clicks and the menu opening tell the app a fan the mouse opened makes way: step 2, Nov 19 2026)
+    assert.deepEqual(orbAsked.filter((w) => w !== 'busy'), ['ask']);
+    assert.deepEqual(orbAsked.slice(-2), ['busy', 'ask']);
     assert.equal(lastOrb().menu, false);
     fromPage('orb-action', 'mute'); // the menu is closed: nothing
     assert.equal(lastOrb().speak, true);

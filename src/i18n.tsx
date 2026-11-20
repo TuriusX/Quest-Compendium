@@ -158,6 +158,8 @@ const en: Dict = {
   "orb.hint": "Open the wheel with {keys}, or {combo} on a controller",
   "orb.hintPad": "Open the wheel with {combo} on a controller",
   "orb.lastCard": "Last card",
+  "orb.fanClick": "Click one to pick it",
+  "orb.fanMore": "More actions",
   "set.recapCard": "Where was I? when I come back",
   "set.recapCardHint": "When you start a game you haven't played for a day or more, a card over the game shows where you left off: where you were, what you were doing and what you last asked.",
   "recap.question": "Where was I?",

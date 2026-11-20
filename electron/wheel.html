@@ -19,7 +19,7 @@
   .keys { margin-top: 10px; font-size: 11.5px; color: #d4d4d8; display: flex; gap: 10px; }
   .g { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; margin-right: 4px;
        border-radius: 4px; font: 800 10px/1 ui-monospace, monospace; color: #16101f; }
-  .g.a { background: #4ade80; } .g.b { background: #f87171; } .g.rs { background: #e4e4e7; }
+  .g.a { background: #4ade80; } .g.b { background: #f87171; } .g.rs, .g.rb { background: #e4e4e7; }
   /* Keyboard and mouse: key caps instead of the controller's buttons, and how to point. */
   .g.kb { background: #e4e4e7; color: #16101f; font: 700 9.5px/1 'Segoe UI', system-ui, sans-serif; padding: 0 5px; }
   .aim { margin-top: 8px; font-size: 10.5px; line-height: 1.3; color: #a1a1aa; max-width: 170px; display: none; }
@@ -47,14 +47,67 @@
   .list .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
   .list .head .title { margin: 0; }
   .list .head .keys { margin: 0; }
+
+  /* ---- The fan from the orb (owner, Nov 19 2026: "the radial wheel flares out from the orb in whatever corner of the
+     screen it is on inward"; wheel.cjs, fanLayout.cjs) ------------------------------------------------------------------
+     With the orb on, the menu is a quarter circle with the orb at its hub, toward the screen's centre: 5 items on the
+     inner ring, the rest on an outer ring. The orb's glass and the card's dark style, in the theme's colour; the items
+     flare out of the orb one after another (~200 ms); the pointed item's name in a dark caption past the fan's edge,
+     readable over a bright game. The window covers only the corner; the mouse reaches only the items, the caption and
+     the questions list (wheel.cjs hit-tests them). */
+  body.fan { font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; color: #ece9f4; }
+  #fan { position: absolute; inset: 0; display: none; }
+  body.fan .ring { display: none; }
+  body.fan #fan { display: block; }
+  body.fan.questions #fan { display: none; }
+  #fanBack { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; opacity: 0; transform: scale(.15);
+             transform-origin: var(--hx) var(--hy); transition: opacity .16s linear, transform .24s cubic-bezier(.2, .9, .3, 1.08); }
+  body.open #fanBack { opacity: 1; transform: none; }
+  .fi { position: absolute; width: var(--sz); height: var(--sz); margin: calc(var(--sz) / -2) 0 0 calc(var(--sz) / -2); border-radius: 50%;
+        display: flex; align-items: center; justify-content: center; box-sizing: border-box; cursor: pointer;
+        background: radial-gradient(circle at 34% 28%, rgba(255, 255, 255, .10), rgba(255, 255, 255, 0) 55%), rgba(13, 12, 20, .93);
+        border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); color: #ece9f4;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .10);
+        opacity: 0; transform: translate(var(--bx), var(--by)) scale(.2);
+        /* (the highlight itself swaps at once: only the flare is animated) */
+        transition: transform .17s cubic-bezier(.2, .9, .3, 1.3) var(--dl), opacity .1s linear var(--dl); }
+  .fi svg { width: 46%; height: 46%; }
+  .fi.r1 { border-color: color-mix(in srgb, var(--accent) 38%, transparent); }
+  body.open .fi { opacity: 1; transform: none; }
+  body.open .fi.on { transform: scale(1.16); background: var(--accent); color: #16101f; border-color: transparent;
+                     box-shadow: 0 0 24px var(--accent), 0 6px 18px rgba(0, 0, 0, .5); transition-delay: 0s; }
+  body.listening .fi { opacity: .25; }
+  /* The fan's own hub, where the orb isn't showing (a card is out, or Hide until next answer). */
+  .fhub { position: absolute; width: var(--hd); height: var(--hd); margin: calc(var(--hd) / -2) 0 0 calc(var(--hd) / -2); border-radius: 50%; display: none;
+          background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--accent) 35%, white), var(--accent) 45%, color-mix(in srgb, var(--accent) 50%, black));
+          box-shadow: 0 0 18px var(--accent), 0 0 4px rgba(255, 255, 255, .6) inset; opacity: .95; }
+  body.fandot .fhub { display: block; }
+  .fcap { position: absolute; max-width: var(--cw); box-sizing: border-box; padding: calc(10px * var(--s)) calc(14px * var(--s)); border-radius: calc(14px * var(--s));
+          background: rgba(13, 12, 20, .94); border: 2px solid var(--accent); box-shadow: 0 10px 30px rgba(0, 0, 0, .6);
+          opacity: 0; transition: opacity .16s linear .1s; pointer-events: auto; }
+  body.open .fcap { opacity: 1; }
+  .fcap .title { font: 700 calc(9.5px * var(--s))/1 ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; color: #a49db8; margin-bottom: calc(6px * var(--s)); }
+  .fcap .flabel { font-size: calc(16.5px * var(--s)); font-weight: 800; line-height: 1.2; }
+  .fcap .flabel:empty { display: none; }
+  .fcap .fhint { font-size: calc(11.5px * var(--s)); line-height: 1.3; color: #a49db8; margin-top: calc(4px * var(--s)); }
+  .fcap .fhint:empty { display: none; }
+  .fcap .keys { margin-top: calc(8px * var(--s)); font-size: calc(11.5px * var(--s)); flex-wrap: wrap; }
+  .fcap .keys:empty { display: none; }
+  body.fan .list { left: auto; top: auto; transform: none; border-radius: 16px; background: rgba(13, 12, 20, .96); font-family: inherit; }
+  @media (prefers-reduced-motion: reduce) { #fanBack, .fi, .fcap { transition: none; } }
 </style>
+<!-- The app's own face (as the card has it), for the fan; without the network, the system face stands in. -->
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 <div class="list" id="list"><div class="head"><div class="title" id="qtitle"></div><div class="keys" id="qkeys"></div></div><div id="qs"></div></div>
+<div id="fan"><svg id="fanBack"></svg><div id="fanItems"></div><div class="fhub" id="fhub"></div>
+  <div class="fcap" id="fcap"><div class="title" id="ftitle"></div><div class="flabel" id="flabel"></div><div class="fhint" id="fhint"></div><div class="keys" id="fkeys"></div></div></div>
 <div class="ring" id="ring">
   <div class="hub"><div class="dot"></div><div class="title" id="title"></div><div class="label" id="label"></div><div class="keys" id="keys"></div><div class="aim" id="aim"></div></div>
 </div>
 <script src="ringPoint.js"></script>
+<script src="fanLayout.cjs"></script>
 <script>
   'use strict';
   // Lucide icons (the app's set), by item key.
@@ -103,9 +156,17 @@
   const AIM_DEAD = 36; // px the mouse moves before it points
   const TAP_MS = 250;
 
+  // The fan from the orb (owner, Nov 19 2026; fanLayout.cjs): where it is ({ corner, scale, hub, dot } from wheel.cjs),
+  // its layout, the ring the sticks point on (the shoulder buttons switch), the item the mouse is over.
+  const Fan = window.qcFan;
+  let fan = null;
+  let L = null;
+  let fring = 0;
+  let hoverI = -1;
+
   // The player's controller's names and colours for A and B (controller mode step 4), when the app sent them.
   function keysHtml(g, t) {
-    if (mode === 'keys') {
+    if (mode === 'keys' || mode === 'mouse') {
       // The keyboard's keys (their names aren't translated, like the keys themselves).
       const cap = document.createElement('span');
       cap.textContent = g === 'a' ? 'Enter' : 'Esc';
@@ -123,6 +184,7 @@
   }
 
   function render() {
+    if (fan) return renderFan();
     ring.querySelectorAll('.item').forEach((el) => el.remove());
     items.forEach((it, i) => {
       const a = (i / items.length) * Math.PI * 2;
@@ -139,16 +201,107 @@
     paint();
   }
   function paint() {
+    const label = listening ? (held ? strings.listening : mode === 'keys' ? strings.listeningKeys || strings.listeningTap : strings.listeningTap) || '' : (items[sel] && items[sel].label) || '';
+    const k = keysHtml;
+    let keys = listening ? (held ? '' : k('a', strings.ask) + k('b', strings.cancel)) : k('a', strings.select) + k('b', strings.close);
+    document.body.classList.toggle('listening', listening);
+    if (fan) {
+      // The fan's caption: the pointed item's name; nothing pointed yet, how to point.
+      document.querySelectorAll('#fanItems .fi').forEach((el) => el.classList.toggle('on', Number(el.dataset.i) === sel));
+      if (!listening && mode === 'mouse') keys = k('b', strings.close);
+      if (!listening && mode === 'pad' && L && L.outer && strings.fanMore) keys += k('rb', strings.fanMore);
+      document.getElementById('ftitle').textContent = strings.title || '';
+      document.getElementById('flabel').textContent = label;
+      document.getElementById('fhint').textContent = listening || sel >= 0 ? '' : mode === 'keys' ? strings.aim || '' : mode === 'mouse' ? strings.fanClick || '' : '';
+      document.getElementById('fkeys').innerHTML = keys;
+      requestAnimationFrame(fanHits);
+      return;
+    }
     ring.querySelectorAll('.item').forEach((el, i) => el.classList.toggle('on', i === sel));
     document.getElementById('title').textContent = listening ? '' : strings.title || '';
-    document.getElementById('label').textContent = listening ? (held ? strings.listening : mode === 'keys' ? strings.listeningKeys || strings.listeningTap : strings.listeningTap) || '' : (items[sel] && items[sel].label) || '';
-    const k = keysHtml;
-    document.getElementById('keys').innerHTML = listening ? (held ? '' : k('a', strings.ask) + k('b', strings.cancel)) : k('a', strings.select) + k('b', strings.close);
+    document.getElementById('label').textContent = label;
+    document.getElementById('keys').innerHTML = keys;
     document.getElementById('aim').textContent = mode === 'keys' && !listening ? strings.aim || '' : '';
-    document.body.classList.toggle('listening', listening);
   }
+
+  // ---- The fan ------------------------------------------------------------------------------------------------------
+  function renderFan() {
+    const s = fan.scale;
+    L = Fan.layout(items.length, fan.corner, s);
+    const hx = fan.hub.x, hy = fan.hub.y;
+    const root = document.documentElement.style;
+    root.setProperty('--s', String(s));
+    root.setProperty('--hx', `${hx}px`);
+    root.setProperty('--hy', `${hy}px`);
+    root.setProperty('--hd', `${Math.round(26 * s)}px`);
+    root.setProperty('--cw', `${L.caption.w}px`);
+    // The fan's glass behind the items: a quarter ring from just outside the orb to past the outer ring.
+    const pt = (t, R) => [hx + L.hx * Math.cos(t * Math.PI / 2) * R, hy + L.vy * Math.sin(t * Math.PI / 2) * R].map((v) => v.toFixed(1)).join(' ');
+    const r0 = Math.round(44 * s), r9 = L.reach + Math.round(12 * s);
+    const sw = L.hx * L.vy > 0 ? 1 : 0;
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#a87ffb';
+    document.getElementById('fanBack').innerHTML =
+      `<defs><radialGradient id="fg" gradientUnits="userSpaceOnUse" cx="${hx}" cy="${hy}" r="${r9}">` +
+      `<stop offset="0" stop-color="${accent}" stop-opacity=".22"/><stop offset=".35" stop-color="#0d0c14" stop-opacity=".5"/><stop offset="1" stop-color="#0d0c14" stop-opacity=".62"/></radialGradient></defs>` +
+      `<path d="M ${pt(0, r9)} A ${r9} ${r9} 0 0 ${sw} ${pt(1, r9)} L ${pt(1, r0)} A ${r0} ${r0} 0 0 ${1 - sw} ${pt(0, r0)} Z" fill="url(#fg)" stroke="${accent}" stroke-opacity=".35" stroke-width="1.5"/>` +
+      (L.outer ? `<path d="M ${pt(0, (L.r1 + L.r2) / 2)} A ${(L.r1 + L.r2) / 2} ${(L.r1 + L.r2) / 2} 0 0 ${sw} ${pt(1, (L.r1 + L.r2) / 2)}" fill="none" stroke="${accent}" stroke-opacity=".16" stroke-width="1"/>` : '');
+    const box = document.getElementById('fanItems');
+    box.innerHTML = '';
+    for (const it of L.items) {
+      const el = document.createElement('div');
+      el.className = 'fi' + (it.ring ? ' r1' : '');
+      el.dataset.i = String(it.i);
+      el.style.left = `${hx + it.x}px`;
+      el.style.top = `${hy + it.y}px`;
+      el.style.setProperty('--sz', `${it.size}px`);
+      el.style.setProperty('--bx', `${-it.x}px`);
+      el.style.setProperty('--by', `${-it.y}px`);
+      // One after another over 90 ms whatever the count, each flaring for 170 ms: all out in ~260 ms.
+      el.style.setProperty('--dl', `${Math.round((90 * it.i) / Math.max(1, L.items.length - 1))}ms`);
+      el.innerHTML = svg(items[it.i].key);
+      // A click is a pick (the mouse reaches the items only: wheel.cjs lets it in over them).
+      el.addEventListener('click', () => { sel = it.i; pick(); });
+      box.append(el);
+    }
+    const hub = document.getElementById('fhub');
+    hub.style.left = `${hx}px`;
+    hub.style.top = `${hy}px`;
+    document.body.classList.toggle('fandot', !!fan.dot);
+    // The caption past the fan's edge, growing away from the hub.
+    const cap = document.getElementById('fcap');
+    cap.style.left = cap.style.right = cap.style.top = cap.style.bottom = '';
+    if (L.hx < 0) cap.style.right = `${innerWidth - (hx + L.caption.x)}px`; else cap.style.left = `${hx + L.caption.x}px`;
+    if (L.vy < 0) cap.style.bottom = `${innerHeight - (hy + L.caption.y)}px`; else cap.style.top = `${hy + L.caption.y}px`;
+    paint();
+  }
+  /** The fan's parts the mouse may reach (where they end up, not mid-flare), for wheel.cjs to let the mouse in. */
+  let lastFanHits = '';
+  function fanHits() {
+    if (!fan || !L) return;
+    const list = [];
+    const r = (id, b, i) => list.push({ id, i, x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height) });
+    if (inList) r('list', document.getElementById('list').getBoundingClientRect(), -1);
+    else {
+      for (const it of L.items) list.push({ id: 'item', i: it.i, x: fan.hub.x + it.x - it.size / 2, y: fan.hub.y + it.y - it.size / 2, w: it.size, h: it.size });
+      r('caption', document.getElementById('fcap').getBoundingClientRect(), -1);
+    }
+    const key = JSON.stringify(list);
+    if (key === lastFanHits) return;
+    lastFanHits = key;
+    window.qcWheel.hits(list);
+  }
+  /** A step along the fan (the d-pad, the arrow keys): inner ring first, then the outer; from nothing, the first or last. */
+  function stepFan(d) {
+    const n = items.length;
+    if (!n) return;
+    sel = sel < 0 ? (d > 0 ? 0 : n - 1) : (sel + d + n) % n;
+    fring = L && L.items[sel] ? L.items[sel].ring : 0;
+    paint();
+  }
+
   function pick() {
-    const it = items[sel];
+    // Only an item that's pointed at (owner, Nov 19 2026): with nothing pointed (sel -1), nothing happens.
+    const it = sel >= 0 ? items[sel] : null;
     if (!it) return;
     if (it.key === 'questions') return openList();
     if (it.key === 'speak') { listening = true; held = false; paint(); }
@@ -161,7 +314,16 @@
     inList = true;
     qsel = 0;
     renderList();
+    const box = document.getElementById('list');
+    box.style.left = box.style.right = box.style.top = box.style.bottom = '';
+    if (fan && L) {
+      // The fan: the list in its corner, beside the orb (not in the middle of the game).
+      const s = fan.scale;
+      if (L.hx < 0) box.style.right = `${innerWidth - fan.hub.x - Math.round(30 * s)}px`; else box.style.left = `${fan.hub.x - Math.round(30 * s)}px`;
+      if (L.vy < 0) box.style.bottom = `${innerHeight - fan.hub.y + Math.round(62 * s)}px`; else box.style.top = `${fan.hub.y + Math.round(62 * s)}px`;
+    }
     document.body.classList.add('questions');
+    if (fan) requestAnimationFrame(fanHits);
   }
   function closeList() {
     inList = false;
@@ -200,30 +362,58 @@
     items = Array.isArray(data.items) ? data.items : [];
     strings = data.strings || {};
     questions = Array.isArray(data.questions) ? data.questions : [];
-    mode = data.mode === 'keys' ? 'keys' : 'pad';
+    mode = data.mode === 'keys' || data.mode === 'mouse' ? data.mode : 'pad';
     releaseKeys = Array.isArray(data.keys) ? data.keys.map((k) => String(k).toLowerCase()) : [];
     holding = mode === 'keys' && releaseKeys.length > 0;
     openedAt = Date.now();
     aimed = false;
     document.body.classList.toggle('keys', mode === 'keys');
     inList = false;
-    document.body.classList.remove('questions');
+    document.body.classList.remove('questions', 'open');
     pointer.reset();
-    if (strings.accent) document.documentElement.style.setProperty('--accent', strings.accent);
-    sel = 0;
+    fan = data.fan && data.fan.hub ? data.fan : null;
+    document.body.classList.toggle('fan', !!fan);
+    const accent = (fan && fan.accent) || strings.accent;
+    if (accent) document.documentElement.style.setProperty('--accent', accent);
+    // The fan opens with nothing pointed at (owner, Nov 19 2026: opening never picks anything; A / Enter with nothing
+    // pointed do nothing). The full ring starts on its first item, as before.
+    sel = fan ? -1 : 0;
+    fring = 0;
+    hoverI = -1;
+    lastFanHits = '';
     listening = false;
     held = false;
     render();
+    void document.body.offsetWidth; // (the fan's items start at the orb, so they flare out)
     document.body.classList.add('open');
+    if (fan) setTimeout(fanHits, 260);
   });
   window.qcWheel.onClose(() => { document.body.classList.remove('open'); listening = false; });
   window.qcWheel.onInput((e) => {
     if (e.type === 'listening') { listening = !!e.on; held = !!e.on; paint(); return; }
+    if (e.type === 'hover') {
+      // The fan: the mouse over an item (wheel.cjs hit-tests it) points at it; off the items, nothing is pointed.
+      hoverI = Number.isInteger(e.i) ? e.i : -1;
+      if (!fan || inList || listening) return;
+      if (hoverI >= 0) { sel = hoverI; aimed = true; fring = L && L.items[sel] ? L.items[sel].ring : fring; }
+      else { aimed = false; if (mode === 'mouse') sel = -1; }
+      paint();
+      return;
+    }
     if (e.type === 'aim') {
       // The mouse, as an offset from where it was when the menu opened: far enough out, it points like a stick.
       if (inList || listening || !items.length) return;
       const dx = Number(e.dx) || 0, dy = Number(e.dy) || 0;
-      if (Math.hypot(dx, dy) < AIM_DEAD) return;
+      if (fan) {
+        if (hoverI >= 0) return; // on an item itself: that one
+        const i = Fan.aimAt(dx, dy, L);
+        if (i === null) { if (aimed) { aimed = false; sel = -1; paint(); } return; }
+        aimed = true;
+        if (i !== sel) { sel = i; paint(); }
+        return;
+      }
+      // Back in the middle: nothing is pointed at, so letting go picks nothing (owner, Nov 19 2026).
+      if (Math.hypot(dx, dy) < AIM_DEAD) { aimed = false; return; }
       aimed = true;
       const turn = (Math.atan2(dx, -dy) / (Math.PI * 2) + 1) % 1;
       const i = Math.round(turn * items.length) % items.length;
@@ -239,6 +429,12 @@
         return;
       }
       if (listening) return;
+      if (fan) {
+        // Either stick points along the fan on its ring (the shoulder buttons switch rings); let go, it stays.
+        const i = Fan.stickAt(Number(e.x) || 0, Number(e.y) || 0, L, fring);
+        if (i !== null && i !== sel) { sel = i; paint(); }
+        return;
+      }
       const i = pointer.stick(e.which === 'left' ? 'left' : 'right', e.x, e.y, items.length);
       if (i !== null) { sel = i; paint(); }
       return;
@@ -259,7 +455,17 @@
       else if (b === 'start') window.qcWheel.dismiss();
       return;
     }
+    if (fan && (b === 'lb' || b === 'rb')) {
+      // The other ring: the item there nearest the one pointed at (or just the ring, with nothing pointed yet).
+      if (!L || !L.outer) return;
+      const o = sel >= 0 ? Fan.otherRing(L, sel) : null;
+      if (o !== null) { sel = o; fring = L.items[o].ring; } else fring = b === 'rb' ? 1 : 0;
+      paint();
+      return;
+    }
     if (dir) {
+      // The fan: the d-pad steps along it (up / left back, down / right on).
+      if (fan) { if (e.src !== 'stick') stepFan(b === 'up' || b === 'left' ? -1 : 1); return; }
       // Both sticks point through 'stick'; the d-pad points too, a fresh press at a time.
       if (e.src !== 'stick' && !e.repeat) { sel = pointer.dpad(b, Date.now(), items.length, sel); paint(); }
     }
@@ -283,16 +489,21 @@
       return;
     }
     const n = items.length || 1;
-    if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'Tab') { e.preventDefault(); sel = (sel + (e.shiftKey && k === 'Tab' ? -1 : 1) + n) % n; paint(); }
+    if (fan && (k === 'ArrowRight' || k === 'ArrowDown' || k === 'Tab' || k === 'ArrowLeft' || k === 'ArrowUp')) {
+      e.preventDefault();
+      stepFan(k === 'ArrowLeft' || k === 'ArrowUp' || (k === 'Tab' && e.shiftKey) ? -1 : 1);
+    }
+    else if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'Tab') { e.preventDefault(); sel = (sel + (e.shiftKey && k === 'Tab' ? -1 : 1) + n) % n; paint(); }
     else if (k === 'ArrowLeft' || k === 'ArrowUp') { e.preventDefault(); sel = (sel - 1 + n) % n; paint(); }
     else if (k === 'Enter' || k === ' ') { e.preventDefault(); pick(); }
     else if (/^[1-9]$/.test(k) && Number(k) <= items.length) { sel = Number(k) - 1; paint(); pick(); }
   });
   // Letting go of the shortcut: pointed somewhere, that's picked; a quick tap (or no pointing) leaves the menu open.
+  // Nothing pointed at when the keys come up: nothing happens (owner, Nov 19 2026; fanLayout.releasePicks).
   window.addEventListener('keyup', (e) => {
     if (!holding || !releaseKeys.includes(String(e.key).toLowerCase())) return;
     holding = false;
-    if (aimed && !inList && !listening && Date.now() - openedAt >= TAP_MS) pick();
+    if (Fan.releasePicks({ aimed, sel, inList, listening, heldMs: Date.now() - openedAt, tapMs: TAP_MS })) pick();
   });
   // The window lost the keys (the focus went elsewhere while they were held): no pick on a key-up that never comes.
   window.addEventListener('blur', () => { holding = false; });

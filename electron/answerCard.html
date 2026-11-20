@@ -108,6 +108,7 @@
                         radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--accent) 25%, transparent), color-mix(in srgb, var(--accent) 55%, transparent) 70%, color-mix(in srgb, color-mix(in srgb, var(--accent) 50%, white) 80%, transparent) 100%);
             box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 60%, transparent), inset 0 0 12px rgba(255, 255, 255, .25); }
   body.nogl #orbCss { display: block; } body.nogl #orbGl { display: none; }
+  body.fan #orbCss { filter: brightness(1.35) drop-shadow(0 0 12px var(--accent)); }
   /* A card whose time ran out waits in the orb: a small dot (and the orb's glow pulses, in the shader). */
   #orbDot { position: absolute; width: calc(12px * var(--s)); height: calc(12px * var(--s)); border-radius: 50%; display: none;
             background: radial-gradient(circle at 40% 35%, #fff3d0, var(--amber) 60%); box-shadow: 0 0 8px var(--amber), 0 0 0 2px rgba(13, 12, 20, .85);
@@ -545,7 +546,7 @@
     return {
       init,
       run(on) { if (on === running) return; running = on; if (on) kick(); else { clearTimeout(timerId); cancelAnimationFrame(rafId); } },
-      hover(on) { hoverTo = on ? 1 : 0; kick(); },
+      hover(on) { hoverTo = typeof on === 'number' ? on : on ? 1 : 0; kick(); },
       pulse(on) { if (pulse !== !!on) { pulse = !!on; kick(); } },
       fastFor(ms) { fast = performance.now() + ms; kick(); },
       rgb: () => tint(),
@@ -737,9 +738,18 @@
     hits();
   });
   // Where the mouse is (the main process hit-tests it): over the card its buttons show; over the orb it glows.
+  // The quick menu's fan out of the orb (owner, Nov 19 2026): the orb glows brighter while it's out.
+  let hoverId = '', fanOut = false;
+  const orbGlow = () => Glass.hover(fanOut ? 1.8 : hoverId === 'orb' ? 1 : 0);
   window.qcCard.onHover((id) => {
+    hoverId = id;
     document.body.classList.toggle('hover', id === 'card');
-    Glass.hover(id === 'orb');
+    orbGlow();
+  });
+  window.qcCard.onFan((on) => {
+    fanOut = on;
+    document.body.classList.toggle('fan', on);
+    orbGlow();
   });
 
   window.qcCard.onShow((d) => {

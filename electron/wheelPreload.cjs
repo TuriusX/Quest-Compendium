@@ -8,4 +8,6 @@ contextBridge.exposeInMainWorld('qcWheel', {
   choose: (key) => ipcRenderer.send('wheel-choose', String(key || '')),
   talk: (state) => ipcRenderer.send('wheel-talk', state === 'cancel' ? 'cancel' : 'end'),
   dismiss: () => ipcRenderer.send('wheel-dismiss'),
+  // The fan from the orb (Nov 19 2026): the parts the mouse may reach, for the main process to hit-test.
+  hits: (list) => ipcRenderer.send('wheel-hits', Array.isArray(list) ? list : []),
 });

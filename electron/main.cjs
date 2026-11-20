@@ -824,10 +824,15 @@ app.whenReady().then(() => {
     onSpeak: (s) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('card-speak', s); },
     onSpeakPref: (on) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('card-speak-pref', !!on); },
     // The orb's menu (owner, Nov 19 2026): the panel, the quest log (as its shortcut does), the quick menu (as Alt+Q).
+    // Step 2 (owner, Nov 19 2026): "Open the wheel" and the mouse resting on the orb open the quick menu's fan from it
+    // (only open it: nothing in it is picked until the player picks); a click or the menu on the orb closes a fan the
+    // mouse opened.
     onOrb: (what) => {
       if (what === 'open') { if (!isAppVisible) slideIn(); return; }
       if (what === 'log') return void tracker.toggle(null).then((r) => { if (r === 'empty' && !isAppVisible) slideIn(); }).catch(() => {});
-      if (what === 'ask') toggleQuickMenu('keys', '');
+      if (what === 'ask') return void openQuickMenu({ mode: 'mouse', from: 'menu' });
+      if (what === 'fan') return void openQuickMenu({ mode: 'mouse', from: 'hover' });
+      if (what === 'busy' && quickWheel && quickWheel.fanMode() === 'mouse') quickWheel.close();
     },
   });
   // Asked over the game (the quick menu, or a keyboard shortcut with the panel away): the card shows the question,
@@ -856,8 +861,8 @@ app.whenReady().then(() => {
     });
   quickWheel = createWheel({
     focusHelper,
-    // The pop-up answer's time runs again once the menu closes.
-    onClose: () => answerCard && answerCard.resume(),
+    // The pop-up answer's time runs again once the menu closes (and the orb stops glowing for the fan).
+    onClose: () => { if (answerCard) { answerCard.resume(); answerCard.setFan(false); } },
     display: () => gameDisplay() || screen.getDisplayNearestPoint(screen.getCursorScreenPoint()),
     whenReleased: () => (controllerService && controllerService.whenReleased ? controllerService.whenReleased() : Promise.resolve()),
     onChoose: (key) => {
@@ -967,31 +972,46 @@ app.whenReady().then(() => {
       if (quickWheel.isOpen()) {
         quickWheel.close();
       } else if (quickWheel.hasItems()) {
-        // Always the quick menu, over the game or the panel (owner, Nov 17 2026: wheel first). With the panel up,
-        // "Open the panel" becomes "Back to the game"; with an answer on the card, "Open this answer" comes first.
-        const s = quickWheel.strings() || {};
-        let items = quickWheel.items();
-        if (isAppVisible) items = items.map((i) => (i.key === 'panel' ? { key: 'back', label: s.backToGame || i.label } : i));
-        else if (answerCard.recent() || (answerCard.orbOn() && answerCard.hasLast())) {
-          // An answer on the card: More of it first (while there's more), then Open in the panel.
-          const extra = [];
-          // A hint on the card: its next level first (it's what the player asked hints for).
-          if (answerCard.hintNext()) extra.push({ key: 'hint', label: answerCard.hintNext() });
-          if (answerCard.canMore() && s.moreAnswer) extra.push({ key: 'more', label: s.moreAnswer });
-          // The orb on: the last card back over the game (owner, Nov 19 2026: pads have no right click or orb to click).
-          if (answerCard.orbOn() && answerCard.hasLast() && !answerCard.isShowing() && s.lastCard) extra.push({ key: 'last', label: s.lastCard });
-          if (s.openAnswer && answerCard.recent()) extra.push({ key: 'answer', label: s.openAnswer });
-          items = [...extra, ...items];
-        }
-        // The card stays where it is (it's in a corner); its time stops while the menu is open.
-        answerCard.pause();
-        quickWheel.show(items, mode === 'keys' ? { mode: 'keys', keys: acceleratorKeys(keys) } : { mode: 'pad' });
+        openQuickMenu(mode === 'keys' ? { mode: 'keys', keys: acceleratorKeys(keys) } : { mode: 'pad' });
       } else if (isAppVisible) {
         slideOut();
       } else {
         // The app hasn't sent the menu yet: the panel, as before.
         showPanelFromPad();
       }
+  }
+  /**
+   * Opens the quick menu (never toggles, never picks: owner, Nov 19 2026, "the radial wheel is how players will select
+   * actions when the main overlay is away", and opening it must never ask anything by itself). `how`: { mode: 'pad' },
+   * { mode: 'keys', keys } or { mode: 'mouse', from: 'hover' | 'menu' } (the orb). With the orb on and the panel away
+   * it's the fan from the orb's corner (wheel.cjs); otherwise the full ring in the middle, as before. The mouse opens
+   * only the fan.
+   */
+  function openQuickMenu(how) {
+      if (!mainWindow || mainWindow.isDestroyed() || quickWheel.isOpen() || !quickWheel.hasItems()) return;
+      const fanAt = !isAppVisible && answerCard.orbOn() ? answerCard.fanAnchor() : null;
+      if (how.mode === 'mouse' && !fanAt) return;
+      // Always the quick menu, over the game or the panel (owner, Nov 17 2026: wheel first). With the panel up,
+      // "Open the panel" becomes "Back to the game"; with an answer on the card, "Open this answer" comes first.
+      const s = quickWheel.strings() || {};
+      let items = quickWheel.items();
+      if (isAppVisible) items = items.map((i) => (i.key === 'panel' ? { key: 'back', label: s.backToGame || i.label } : i));
+      else if (answerCard.recent() || (answerCard.orbOn() && answerCard.hasLast())) {
+        // An answer on the card: More of it first (while there's more), then Open in the panel.
+        const extra = [];
+        // A hint on the card: its next level first (it's what the player asked hints for).
+        if (answerCard.hintNext()) extra.push({ key: 'hint', label: answerCard.hintNext() });
+        if (answerCard.canMore() && s.moreAnswer) extra.push({ key: 'more', label: s.moreAnswer });
+        // The orb on: the last card back over the game (owner, Nov 19 2026: pads have no right click or orb to click).
+        if (answerCard.orbOn() && answerCard.hasLast() && !answerCard.isShowing() && s.lastCard) extra.push({ key: 'last', label: s.lastCard });
+        if (s.openAnswer && answerCard.recent()) extra.push({ key: 'answer', label: s.openAnswer });
+        items = [...extra, ...items];
+      }
+      // The card stays where it is (it's in a corner); its time stops while the menu is open. With a card out, the
+      // fan flares from the card's inner corner instead of folding it (its first items act on it).
+      answerCard.pause();
+      if (fanAt) answerCard.setFan(true);
+      quickWheel.show(items, fanAt ? { ...how, fan: { ...fanAt, accent: (appLook && appLook.accent) || s.accent || '' } } : how);
   }
   /** A shortcut's keys as the page's KeyboardEvent.key names, lower case ('Alt+Q' -> ['alt', 'q']): letting any go picks. */
   function acceleratorKeys(acc) {

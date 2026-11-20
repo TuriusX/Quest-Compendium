@@ -45,6 +45,7 @@ const THINKING_MS = 120000; // a question that never got an answer goes after th
 const HINT_MS = 7000; // the orb's how-to-ask line
 const FOLD_MS = 520; // the card folding back into the orb (the page's animation, and a little more)
 const MENU_LEAVE_MS = 1400; // the orb's menu closes once the mouse has been away from it this long
+const DWELL_MS = 480; // the mouse resting on the orb this long opens the quick menu's fan (owner, Nov 19 2026: about half a second)
 
 /** How long an answer stays: reading time for what's showing (20 s + 1 s per 15 words), at most 90 s; a warning, 30 s at least. */
 function readingMs(text, hasWarning) {
@@ -61,8 +62,9 @@ const pictureOf = (p) => (p && typeof p.url === 'string' && p.url
 /**
  * @param {{ display: () => Electron.Display, strings: () => object, onAction: (what: string, current: object|null) => void,
  *   onSpeak?: (s: { id: string, text: string } | null) => void, onSpeakPref?: (on: boolean) => void,
- *   onOrb?: (what: 'open'|'log'|'ask') => void }} opts
- * onSpeak(null) stops the reading.
+ *   onOrb?: (what: 'open'|'log'|'ask'|'fan'|'busy') => void }} opts
+ * onSpeak(null) stops the reading. onOrb('fan'): the mouse rested on the orb (open the quick menu's fan; Nov 19 2026);
+ * onOrb('busy'): the orb was clicked or its menu opened (a fan the mouse opened makes way).
  */
 function createAnswerCard(opts) {
   let win = null;
@@ -89,6 +91,9 @@ function createAnswerCard(opts) {
   let mouseIn = null;
   let watch = null;
   let menuSeenAt = 0;
+  let dwellFrom = 0; // since when the mouse has rested on the orb (the fan opens after DWELL_MS)
+  let dwellDone = false;
+  let fanOn = false; // the quick menu's fan is out of the orb: it glows
 
   const scale = () => SCALE[prefs.size] || 1;
   const width = () => Math.round(WIDTH * scale());
@@ -135,6 +140,7 @@ function createAnswerCard(opts) {
       w.webContents.send('orb-state', orbLook());
       for (const [c, p] of queue) w.webContents.send(c, p);
       queue = [];
+      if (fanOn) w.webContents.send('orb-fan', true);
     });
     win.loadFile(path.join(__dirname, 'answerCard.html'));
     win.on('closed', () => {
@@ -163,16 +169,19 @@ function createAnswerCard(opts) {
     w.destroy();
   }
 
-  /** The card's corner of the game's screen: at the card's height, or with the orb on, the card's full room. */
-  function place() {
-    if (!alive()) return;
+  /** Where the window goes: the card's corner of the game's screen, at the card's height or (the orb on) its full room. */
+  function bounds() {
     const d = opts.display();
     const { x, y, width: W, height: H } = d.workArea || d.bounds;
     const w = width();
     const h = orb.on ? maxHeight() : Math.max(60, Math.min(maxHeight(), height));
     const right = prefs.corner === 'tr' || prefs.corner === 'br';
     const bottom = prefs.corner === 'bl' || prefs.corner === 'br';
-    const next = { x: Math.round(right ? x + W - w - MARGIN : x + MARGIN), y: Math.round(bottom ? y + H - h - MARGIN : y + MARGIN), width: w, height: h };
+    return { x: Math.round(right ? x + W - w - MARGIN : x + MARGIN), y: Math.round(bottom ? y + H - h - MARGIN : y + MARGIN), width: w, height: h };
+  }
+  function place() {
+    if (!alive()) return;
+    const next = bounds();
     const b = win.getBounds();
     if (b.x !== next.x || b.y !== next.y || b.width !== next.width || b.height !== next.height) win.setBounds(next);
   }
@@ -205,6 +214,18 @@ function createAnswerCard(opts) {
       const x = p.x - b.x, y = p.y - b.y;
       const hit = hits.find((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
       over(hit ? hit.id : '');
+      // The mouse resting on the orb opens the quick menu's fan (owner, Nov 19 2026), once per stay: a short dwell, so
+      // a cursor passing over it doesn't. Only opens the menu; nothing in it is picked (main.cjs, wheel.cjs).
+      if (overId === 'orb' && orbState.look(orb).orb && !orb.menu) {
+        if (!dwellFrom) dwellFrom = Date.now();
+        else if (!dwellDone && Date.now() - dwellFrom >= DWELL_MS) {
+          dwellDone = true;
+          if (opts.onOrb) opts.onOrb('fan');
+        }
+      } else {
+        dwellFrom = 0;
+        dwellDone = false;
+      }
       // The menu has no focus to lose: it closes once the mouse has stayed away from it (and the orb) for a moment.
       if (orb.menu) {
         if (hit) menuSeenAt = Date.now();
@@ -217,6 +238,8 @@ function createAnswerCard(opts) {
     watch = null;
     overId = '';
     mouseIn = null;
+    dwellFrom = 0;
+    dwellDone = false;
   }
   /** The mouse is over a part of the page (or none): the window takes it there, the page lights it, the card's time waits. */
   function over(id) {
@@ -383,6 +406,11 @@ function createAnswerCard(opts) {
   ipcMain.on('orb-action', (event, what) => {
     if (!fromCard(event) || !orb.on) return;
     const l = orbState.look(orb);
+    // A click or the menu on the orb: a fan the mouse opened makes way (main.cjs).
+    if ((what === 'click' && l.orb) || (what === 'menu' && !orb.menu)) {
+      dwellDone = true; // (not again until the mouse has left the orb)
+      if (opts.onOrb) opts.onOrb('busy');
+    }
     if (what === 'click' && l.orb) {
       if (orbState.clickAction(!!last) === 'recall') recall();
       else hint();
@@ -549,6 +577,38 @@ function createAnswerCard(opts) {
         rect: { x: right ? b.x + b.width - g.box : b.x, y: bottom ? b.y + b.height - g.box : b.y, width: g.box, height: g.box },
         right,
       };
+    },
+    /**
+     * Where the quick menu's fan flares from (owner, Nov 19 2026), while the orb is on and the panel away: the orb's
+     * centre on screen, or with a card out, the card's corner toward the screen's centre (the fan's items act on that
+     * card, so it stays in view: More, the hint's next level, Open this answer). `dot`: the orb isn't showing (a card
+     * is out, or Hide until next answer), so the fan draws its own hub. null otherwise (the full ring in the middle).
+     */
+    fanAnchor() {
+      if (!orb.on || !orb.away) return null;
+      const s = scale();
+      const g = orbState.orbGeometry(s);
+      const right = prefs.corner === 'tr' || prefs.corner === 'br';
+      const bottom = prefs.corner === 'bl' || prefs.corner === 'br';
+      const b = alive() ? win.getBounds() : bounds();
+      const c = shownAt && hits.find((r) => r.id === 'card');
+      if (c) {
+        const off = Math.round(10 * s); // a little off the card's corner, toward the screen's centre
+        return {
+          hub: { x: Math.round(b.x + (right ? c.x - off : c.x + c.w + off)), y: Math.round(b.y + (bottom ? c.y - off : c.y + c.h + off)) },
+          corner: prefs.corner, scale: s, dot: true, card: true,
+        };
+      }
+      return {
+        hub: { x: Math.round(right ? b.x + b.width - g.box / 2 : b.x + g.box / 2), y: Math.round(bottom ? b.y + b.height - g.box / 2 : b.y + g.box / 2) },
+        corner: prefs.corner, scale: s, dot: !orbState.look(orb).orb, card: false,
+      };
+    },
+    /** The fan is out of the orb (true) or gone (false): the orb glows brighter while it's out. */
+    setFan(on) {
+      if (fanOn === !!on) return;
+      fanOn = !!on;
+      send('orb-fan', fanOn);
     },
     /** The app's look changed (its theme's colour): the orb and the card redraw in it. */
     restyle() {
