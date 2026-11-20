@@ -1228,6 +1228,8 @@ export default function App() {
       place: activeTab.place?.name || '',
       combat: !!last.combat,
       picture,
+      // Immersive mode (owner, Nov 20 2026, idea #8): the pop-up's storybook look.
+      immersive: settings.aiMode === 'roleplay',
     });
   }, [activeTab?.messages, cardCloseUpTick]);
   useEffect(() => {
@@ -1840,6 +1842,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     const v = logViewRef.current;
     if (v && [v.now, ...v.next].some((x) => x?.id === s.id)) return moveOn(s);
     trackerEventRef.current({ type: 'tick', item: s.id, done: true });
+    // It's listed under Earlier too (no place: it doesn't come back by itself), where a tap puts it back.
+    patchLog((st) => ({ passed: [...(st.passed || []).filter((x) => x.id !== s.id), { id: s.id, text: s.text, at: Date.now() }] }));
     showCleared({ ids: [s.id], text: s.text, from: 'removed' });
   };
   const undoLog = () => {
@@ -1856,6 +1860,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       return;
     }
     for (const id of c.ids) trackerEventRef.current({ type: 'tick', item: id, done: false });
+    if (c.from === 'removed') patchLog((st) => ({ passed: (st.passed || []).filter((x) => !c.ids.includes(x.id)) }));
     showCleared(null);
   };
   const setLogNow = (msgId: string) => {
@@ -1880,6 +1885,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       const x = (st.passed || []).find((p) => p.id === id);
       return { passed: (st.passed || []).filter((p) => p.id !== id), ...(x?.msgId && st.now !== x.msgId ? { now: x.msgId } : {}) };
     });
+    // A guide item removed from the log (Nov 20 2026, no tick boxes): it comes back onto the log.
+    if (/^g:/.test(id)) trackerEventRef.current({ type: 'tick', item: id, done: false });
     if (logCleared?.from === 'moved' && logCleared.ids.includes(id)) showCleared(null);
   };
   const moveOnRef = useRef(moveOn);
@@ -2216,7 +2223,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       const res = await fetch(`${getApiBaseUrl()}/api/card-summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ question, answer: answer.slice(0, 12000), ...(hint ? { hint: true } : {}) }),
+        // Immersive mode: the summary keeps the narrator's voice (the action stays plain and exact).
+        body: JSON.stringify({ question, answer: answer.slice(0, 12000), ...(hint ? { hint: true } : {}), ...(settingsRef.current?.aiMode === 'roleplay' ? { immersive: true } : {}) }),
         signal: ctl.signal,
       });
       clearTimeout(timer);
@@ -3875,12 +3883,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
             game={activeGame?.name || activeTab?.name || ''}
             gameKey={w.key}
             done={w.done}
-            onRemove={(id, text) => {
-              // g:<area>:<item id>, kept where the guide's ticks are (Undo in the log puts it back).
-              const rest = id.slice(2), cut = rest.indexOf(':');
-              if (cut > 0) for (const e of rest.slice(cut + 1).split('+')) setEntryDone(w.key!, rest.slice(0, cut), e, true);
-              showCleared({ ids: [id], text, from: 'removed' });
-            }}
+            // g:<area>:<item id>: removed like any log item (kept where the guide's ticks are; Undo, or Earlier, puts it back).
+            onRemove={(id, text) => removeLog({ id, text })}
             steam={activeGame?.achievements?.length ? { list: activeGame.achievements, unlocked: activeGame.unlockedAchievements, total: activeGame.totalAchievements } : null}
           />
         );
