@@ -35,7 +35,10 @@ import {
   Flag,
   ThumbsUp,
   ThumbsDown,
-  Pin,
+  Bookmark,
+  NotebookPen,
+  Search,
+  Trash2,
 } from './icons';
 import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions, NotOnScreen } from './ScreenPointers';
 import { VisualCard, type VisualEvent } from './VisualCard';
@@ -120,6 +123,12 @@ interface ChatAreaProps {
   nowUndo?: { msgId?: string; onUndo: () => void } | null;
   onPinAnswer?: (msgId: string) => void;
   onDismissOffer?: (msgId: string) => void;
+  /** Find an answer again (Nov 20 2026): the magnifier opens it; the panel (AnswerSearch) shows under the Ask | Guide row. */
+  onOpenSearch?: () => void;
+  searchPanel?: React.ReactNode;
+  /** Delete a question and its answer (the answer's ⋯ menu), and the Undo line for a few seconds after. */
+  onDeleteAnswer?: (msgId: string) => void;
+  deletedNote?: { text: string; onUndo: () => void } | null;
   /** The player picked where they are (one tap or voice): remember it for this game. */
   onSetPlace?: (name: string) => void;
   /** "Locate me" in the PlaceBar (desktop, games with a guide). */
@@ -279,6 +288,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   nowUndo,
   onPinAnswer,
   onDismissOffer,
+  onOpenSearch,
+  searchPanel,
+  onDeleteAnswer,
+  deletedNote,
   onSetPlace,
   onLocate,
   locating,
@@ -286,7 +299,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onSetStory,
 }) => {
   const t = useT();
-  // The latest finished answer: only it offers "Set as Now" (older answers keep 📌 Pin).
+  // The latest finished answer: only it offers "Set as Now" (older answers keep Save).
   const latestAnswerId = (() => {
     const ms = activeTab?.messages || [];
     for (let i = ms.length - 1; i >= 0; i--) if (ms[i].role === 'assistant' && !ms[i].isStreaming) return ms[i].id;
@@ -301,12 +314,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }, 150);
     return () => clearTimeout(id);
   }, [latestAnswerId]);
-  // A pinned answer picked on the quest log: the conversation scrolls to it.
+  // A saved answer picked on the quest log, or an answer found by the search: the conversation (the Ask tab) scrolls to
+  // it and it flashes. (A game just opened draws first: it's looked for over a few frames.)
   useEffect(() => {
     const on = (e: Event) => {
       const id = String((e as CustomEvent).detail?.id || '');
-      const el = id ? document.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(id)}"]`) : null;
-      if (el) { el.scrollIntoView({ block: 'start', behavior: 'smooth' }); el.classList.add('qc-flash'); setTimeout(() => el.classList.remove('qc-flash'), 1600); }
+      if (!id) return;
+      setMode('ask');
+      let tries = 0;
+      const look = () => {
+        const el = document.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(id)}"]`);
+        if (el) { el.scrollIntoView({ block: 'start', behavior: 'smooth' }); el.classList.add('qc-flash'); setTimeout(() => el.classList.remove('qc-flash'), 1600); }
+        else if (tries++ < 20) requestAnimationFrame(look);
+      };
+      requestAnimationFrame(look);
     };
     window.addEventListener('qc-scroll-to-msg', on);
     return () => window.removeEventListener('qc-scroll-to-msg', on);
@@ -1598,8 +1619,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
           {/* (The "⚠ N missable" chip that sat here was removed: owner, Nov 15 2026, the app shouldn't be overfocused on
               missables; they show as badges in the quest log's Worth getting here and in its Watch out warning.) */}
+          {onOpenSearch && (
+            <button type="button" onClick={onOpenSearch} data-qc-open-search="" title={t('search.open')} aria-label={t('search.open')} aria-expanded={!!searchPanel}
+              className={`flex-shrink-0 w-10 flex items-center justify-center border-l border-white/[0.08] transition-colors cursor-pointer outline-none focus-visible:bg-white/[0.06] ${searchPanel ? 'text-[var(--accent-color)]' : 'text-zinc-400 hover:text-white'}`}>
+              <Search className="w-4 h-4" />
+            </button>
+          )}
         </div>
       )}
+      {activeTab && searchPanel}
 
       {activeTab && showTour && <Walkthrough isDesktop={isDesktopApp} screenshotKeys={screenshotKeys} hideKeys={hideKeys} tickKeys={tickKeys} nextKeys={nextKeys} onDone={() => setShowTour(false)} />}
 
@@ -1984,7 +2012,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         {onPinAnswer && (
                           <button type="button" onClick={() => onPinAnswer(msg.id)} aria-pressed={!!questLog?.pins?.includes(msg.id)}
                             className="px-2.5 py-1 rounded border border-white/15 bg-[#1b1a24] text-[12px] font-mono font-bold text-zinc-200 flex items-center gap-1 outline-none focus-visible:ring-2 focus-visible:ring-white">
-                            <Pin className="w-3 h-3" />{questLog?.pins?.includes(msg.id) ? t('tracker.logPinnedAnswer') : t('tracker.logPin')}
+                            <Bookmark className="w-3 h-3" fill={questLog?.pins?.includes(msg.id) ? 'currentColor' : 'none'} />{questLog?.pins?.includes(msg.id) ? t('tracker.logPinnedAnswer') : t('tracker.logPin')}
                           </button>
                         )}
                         {onDismissOffer && (
@@ -2065,7 +2093,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           );
                         })}
 
-                        {/* 📌 Pin to the quest log */}
+                        {/* Save (a bookmark; Nov 20 2026, was 📌 Pin): in the quest log's Saved, and first in Find an answer */}
                         {onPinAnswer && (
                           <button
                             type="button"
@@ -2076,7 +2104,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             aria-pressed={!!questLog?.pins?.includes(msg.id)}
                             className={`p-1.5 rounded-lg transition-colors cursor-pointer hover:bg-white/10 ${questLog?.pins?.includes(msg.id) ? 'text-[var(--accent-color)]' : 'text-zinc-400 hover:text-white'}`}
                           >
-                            <Pin className="w-3.5 h-3.5" />
+                            <Bookmark className="w-3.5 h-3.5" fill={questLog?.pins?.includes(msg.id) ? 'currentColor' : 'none'} />
                           </button>
                         )}
 
@@ -2108,7 +2136,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                   onClick={() => { handleSaveToNotes(msg.id, msg.text); setActionMenu(null); }}
                                   className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-[12.5px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer"
                                 >
-                                  <BookmarkPlus className="w-3.5 h-3.5 text-purple-300" />
+                                  <NotebookPen className="w-3.5 h-3.5 text-purple-300" />
                                   {t('chat.saveTitle')}
                                 </button>
                                 <button
@@ -2140,6 +2168,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                   <Flag className="w-3.5 h-3.5 text-rose-300" fill={msg.reported ? 'currentColor' : 'none'} />
                                   {msg.reported ? t('report.reported') : t('report.tooltip')}
                                 </button>
+                                {onDeleteAnswer && (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    data-qc-delete-qa=""
+                                    onClick={() => { setActionMenu(null); onDeleteAnswer(msg.id); }}
+                                    className="w-full flex items-center gap-2.5 px-3 py-1.5 mt-1 border-t border-white/[0.07] text-left text-[12.5px] text-zinc-200 hover:bg-red-500/10 focus:bg-red-500/10 outline-none cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-red-300" />
+                                    {t('qa.delete')}
+                                  </button>
+                                )}
                               </div>
                             </>
                           )}
@@ -2284,6 +2324,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       )}
 
       {/* The ask box belongs to the Ask tab; the Guides tab gets the full height (owner, Nov 18 2026). */}
+      {deletedNote && mode !== 'guide' && (
+        <div role="status" data-qc-deleted="" className="flex-shrink-0 flex items-center gap-3 px-4 py-2 border-t border-white/[0.08] bg-[#14141c] text-[12.5px] text-zinc-300">
+          <Trash2 className="w-3.5 h-3.5 text-zinc-500" aria-hidden="true" />
+          <span className="flex-1 min-w-0 truncate">{deletedNote.text}</span>
+          <button type="button" onClick={deletedNote.onUndo} className="font-semibold text-[var(--accent-color)] hover:brightness-125 cursor-pointer outline-none focus-visible:underline">{t('qa.undo')}</button>
+        </div>
+      )}
       <div className={activeTab && mode === 'guide' ? 'hidden' : 'contents'}>{askForm}</div>
 
       {/* Embedded Browser Screen Capture Guidance Modal */}

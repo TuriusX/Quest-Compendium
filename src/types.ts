@@ -251,6 +251,8 @@ export interface GameTab {
    * under (the first keeps its old tab's), and the current playthrough (shown when a game has more than one).
    */
   memoryKey?: string;
+  /** Games-not-tabs: the playthrough's deleted messages (GamePlaythrough.deletedMsgs), carried with the tab. */
+  deletedMsgs?: Record<string, number>;
   playthrough?: { id: string; name: string; count: number };
   /** A space with no game yet ("Which game is this?"): its old compendium name is never shown. */
   unknownGame?: boolean;
@@ -288,6 +290,8 @@ export interface GamePlaythrough {
   place?: GameTab['place'];
   guideSteps?: GameTab['guideSteps'];
   questLog?: GameTab['questLog'];
+  /** Deleted questions and answers (message id -> when; Nov 20 2026): a copy that still has them can't bring them back. */
+  deletedMsgs?: Record<string, number>;
   /**
    * The game names its playthrough memory (users/{uid}/playthrough/{playKey(name)}) and progress (settings.gameDone,
    * lower case) were kept under before: read from all of them, so nothing a merged tab remembered is left behind.

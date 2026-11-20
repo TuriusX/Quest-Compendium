@@ -581,6 +581,12 @@ function createAnswerCard(opts) {
     },
     /** Showing (thinking or an answer): answers that arrive now go on it. */
     isShowing: () => !!shownAt,
+    /** A question and answer the player deleted (Nov 20 2026): never brought back as the last card; off the card if it's up. */
+    forget(id) {
+      if (!id) return;
+      if (last && last.id === id) last = null;
+      if (current && current.id === id) { current = null; if (shownAt) hide('close'); }
+    },
     isThinking: () => !!thinkingNow,
     /** The answer "Open this answer" opens: the one on the card, or put away within the last 2 minutes. */
     recent() {

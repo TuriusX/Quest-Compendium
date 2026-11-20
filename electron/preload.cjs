@@ -85,6 +85,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setQuickMenu: (items, strings) => ipcRenderer.send('quick-menu-items', { items, strings }),
   onQuickAction: (callback) => { ipcRenderer.removeAllListeners('quick-action'); ipcRenderer.on('quick-action', (event, key) => callback(String(key || ''))); },
   // Every new answer, for the pop-up over the game (answerCard.cjs): its words, steps, model, place and one picture.
+  // A question and answer the player deleted: the pop-up card forgets it.
+  forgetAnswer: (id) => ipcRenderer.send('answer-forget', String(id || '')),
   answerArrived: (a) => ipcRenderer.send('answer-arrived', a && typeof a === 'object' ? {
     id: String(a.id || ''), question: String(a.question || ''), title: String(a.title || ''), text: String(a.text || ''),
     steps: Array.isArray(a.steps) ? a.steps.slice(0, 8).map((s) => ({ kind: String((s && s.kind) || 'step'), label: String((s && s.label) || ''), where: String((s && s.where) || '') })) : [],

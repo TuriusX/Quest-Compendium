@@ -55,9 +55,12 @@ import { formatShortcut } from './utils/shortcut';
 import { setEntryDone, readDone, exportAllDone, importAllDone, GUIDE_DONE_EVENT } from './utils/guideProgress';
 import { SPOT_EVENT, type SpotRequest } from './utils/spotIt';
 import {
-  addEntries, editEntry, removeEntry, clearPlaythrough, mergePlaythrough, playthroughForRequest, readLocal, writeLocal,
-  emptyPlaythrough, OPEN_PLAYTHROUGH_EVENT, type Playthrough, type PlayKind,
+  addEntries, editEntry, removeEntry, forgetAnswers, clearPlaythrough, mergePlaythrough, playthroughForRequest, readLocal, writeLocal,
+  emptyPlaythrough, OPEN_PLAYTHROUGH_EVENT, type Playthrough, type PlayKind, type PlayEntry,
 } from './utils/playthrough';
+import { qaPair, logWithout } from './utils/answerFind';
+import { recordDeletedMessages } from './hooks/tabMerge';
+import { AnswerSearch } from './components/AnswerSearch';
 import { buildRecap, recapCard, RECAP_GAP_MS } from './utils/recap';
 import { nextHintLevel, textWithHints } from './utils/hintLevels';
 import { readCloud, writeCloud } from './utils/playthroughCloud';
@@ -1893,7 +1896,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       (window as any).electronAPI?.showQuestLog?.(p?.data, p?.gameKey);
     }, 0);
   };
-  const togglePin = (msgId: string) => patchLog((st) => ({ pins: (st.pins || []).includes(msgId) ? (st.pins || []).filter((x) => x !== msgId) : [msgId, ...(st.pins || [])].slice(0, 20) }));
+  const togglePin = (msgId: string) => patchLog((st) => ({ pins: (st.pins || []).includes(msgId) ? (st.pins || []).filter((x) => x !== msgId) : [msgId, ...(st.pins || [])].slice(0, 50) }));
   const hideWatch = (id: string) => patchLog((st) => ({ hidden: [...new Set([...(st.hidden || []), id])] }));
   // The Now box's X (owner, Nov 19 2026, idea #3): move on. The step isn't done and isn't gone: it goes to "Earlier"
   // (tap to make it Now again) and comes back by itself when the player returns to that place. Undo for a few seconds.
@@ -2088,12 +2091,112 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     playSaveTimer.current = setTimeout(() => void writeCloud(uid, game, next), 800);
   };
   /** Choices and key items an answer noted, or a guide entry ticked: added when the memory is on. */
-  const rememberPlay = (items: { kind: PlayKind; text: string; source: 'answer' | 'guide' }[]) => {
+  const rememberPlay = (items: { kind: PlayKind; text: string; source: 'answer' | 'guide'; msgId?: string }[]) => {
     if (!memoryOn || !items.length) return;
     updatePlay((p) => addEntries(p, items));
   };
   const rememberPlayRef = useRef(rememberPlay);
   rememberPlayRef.current = rememberPlay;
+
+  // Delete a question and its answer (owner, Nov 20 2026, idea #10): gone from the conversation at once, so from what
+  // later questions send (their history), the quest log (Now, Saved, Earlier), the recap and the pop-up's Last card, and
+  // the playthrough notes it added. Undo for 8 seconds (or Ctrl+Z); only then is the delete made final for the other
+  // copies (tombstones: tabMerge for tabs, deletedMsgs for game spaces), so Undo always works.
+  type QaDeleted = { tabId: string; ids: string[]; removed: { at: number; msg: ChatMessage }[]; logBefore?: Partial<NonNullable<GameTab['questLog']>>; gone: PlayEntry[] };
+  const [qaDeleted, setQaDeleted] = useState<QaDeleted | null>(null);
+  const qaPending = useRef<QaDeleted | null>(null);
+  const qaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finishDelete = () => {
+    const d = qaPending.current;
+    qaPending.current = null;
+    if (qaTimer.current) { clearTimeout(qaTimer.current); qaTimer.current = null; }
+    setQaDeleted(null);
+    if (!d) return;
+    const now = Date.now();
+    recordDeletedMessages(d.ids, now);
+    if (spacesOn) {
+      setTabs((prev) => prev.map((t) => {
+        if (t.id !== d.tabId) return t;
+        const all = Object.entries({ ...(t.deletedMsgs || {}), ...Object.fromEntries(d.ids.map((id) => [id, now])) }).sort((a, b) => b[1] - a[1]).slice(0, 300);
+        return { ...t, deletedMsgs: Object.fromEntries(all) };
+      }));
+    }
+    for (const id of d.ids) (window as any).electronAPI?.forgetAnswer?.(id);
+  };
+  const finishDeleteRef = useRef(finishDelete);
+  finishDeleteRef.current = finishDelete;
+  const deleteQa = (answerId: string) => {
+    const tab = activeTab;
+    if (!tab) return;
+    if (qaPending.current) finishDelete();
+    const ids = qaPair(tab.messages, answerId);
+    if (!ids.length) return;
+    const removed = tab.messages.map((msg, at) => ({ at, msg })).filter((x) => ids.includes(x.msg.id));
+    const logPatch = logWithout(tab.questLog, ids);
+    const logBefore = logPatch ? (Object.fromEntries(Object.keys(logPatch).map((k) => [k, (tab.questLog as any)?.[k]])) as QaDeleted['logBefore']) : undefined;
+    setTabs((prev) => prev.map((t) => (t.id === tab.id
+      ? { ...t, messages: t.messages.filter((m) => !ids.includes(m.id)), ...(logPatch ? { questLog: nextLogState(t.questLog, logPatch) } : {}) }
+      : t)));
+    const gone = playRef.current.entries.filter((e) => e.msgId && ids.includes(e.msgId));
+    if (gone.length) updatePlay((p) => forgetAnswers(p, ids));
+    const d: QaDeleted = { tabId: tab.id, ids, removed, logBefore, gone };
+    qaPending.current = d;
+    setQaDeleted(d);
+    qaTimer.current = setTimeout(() => finishDeleteRef.current(), 8000);
+  };
+  const undoDelete = () => {
+    const d = qaPending.current;
+    if (!d) return;
+    qaPending.current = null;
+    if (qaTimer.current) { clearTimeout(qaTimer.current); qaTimer.current = null; }
+    setQaDeleted(null);
+    setTabs((prev) => prev.map((t) => {
+      if (t.id !== d.tabId) return t;
+      const msgs = [...t.messages];
+      for (const r of d.removed) msgs.splice(Math.min(r.at, msgs.length), 0, r.msg);
+      return { ...t, messages: msgs, ...(d.logBefore ? { questLog: nextLogState(t.questLog, d.logBefore) } : {}) };
+    }));
+    if (d.gone.length) {
+      const back = new Set(d.gone.map((e) => e.id));
+      updatePlay((p) => ({ ...p, entries: [...d.gone, ...p.entries].sort((a, b) => b.at - a.at), deleted: Object.fromEntries(Object.entries(p.deleted || {}).filter(([id]) => !back.has(id))), updatedAt: Date.now() }));
+    }
+  };
+  const undoDeleteRef = useRef(undoDelete);
+  undoDeleteRef.current = undoDelete;
+  const qaShowing = !!qaDeleted;
+  useEffect(() => {
+    if (!qaShowing) return;
+    const key = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      e.preventDefault();
+      undoDeleteRef.current();
+    };
+    // Closing the app inside the 8 seconds: the delete is made final now.
+    const unload = () => finishDeleteRef.current();
+    window.addEventListener('keydown', key);
+    window.addEventListener('beforeunload', unload);
+    return () => { window.removeEventListener('keydown', key); window.removeEventListener('beforeunload', unload); };
+  }, [qaShowing]);
+
+  // Find an answer again (owner, Nov 20 2026, idea #1): the magnifier above the conversation, or Ctrl+F.
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'f') return;
+      e.preventDefault();
+      setSearchOpen(true);
+      setTimeout(() => document.querySelector<HTMLInputElement>('[data-qc-search] input')?.focus(), 0);
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, []);
+  const pickFound = (tabId: string, answerId: string) => {
+    setSearchOpen(false);
+    if (tabId !== activeTab?.id) handleSelectTab(tabId);
+    setTimeout(() => window.dispatchEvent(new CustomEvent('qc-scroll-to-msg', { detail: { id: answerId } })), 30);
+  };
   const [playOpen, setPlayOpen] = useState(false);
   useEffect(() => {
     const open = () => setPlayOpen(true);
@@ -3456,7 +3559,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       rememberPlay((Array.isArray(data.remember) ? data.remember : [])
         .filter((x: any) => x && (x.kind === 'choice' || x.kind === 'found') && typeof x.text === 'string')
         .slice(0, 3)
-        .map((x: any) => ({ kind: x.kind as PlayKind, text: x.text, source: 'answer' as const })));
+        .map((x: any) => ({ kind: x.kind as PlayKind, text: x.text, source: 'answer' as const, msgId: aiMessage.id })));
 
       // The answer wins (owner, Oct 31 2026): a question about what the player is doing or should do where they are, and
       // an answer with things to do, makes it the quest log's Now by itself, its steps the Next, with a few seconds of
@@ -4171,6 +4274,10 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 onSetNow={isDesktop ? setLogNow : undefined}
                 nowUndo={logCleared?.from === 'now' ? { msgId: logCleared.msgId, onUndo: undoLog } : null}
                 onPinAnswer={isDesktop ? togglePin : undefined}
+                onOpenSearch={() => setSearchOpen((x) => !x)}
+                searchPanel={searchOpen ? <AnswerSearch tabs={tabs} activeTabId={activeTab.id} onPick={pickFound} onClose={() => setSearchOpen(false)} /> : null}
+                onDeleteAnswer={deleteQa}
+                deletedNote={qaDeleted && qaDeleted.tabId === activeTab.id ? { text: tr('qa.deleted'), onUndo: undoDelete } : null}
                 onDismissOffer={(id) => patchLog((st) => ({ hidden: [...new Set([...(st.hidden || []), `offer:${id}`])] }))}
                 nextKeys={formatShortcut(settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down')}
                 immersiveReadAloud={settings.immersiveReadAloud !== false}

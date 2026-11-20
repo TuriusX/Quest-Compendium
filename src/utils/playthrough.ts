@@ -14,7 +14,8 @@
  */
 
 export type PlayKind = 'choice' | 'found';
-export type PlayEntry = { id: string; kind: PlayKind; text: string; source: 'answer' | 'guide' | 'you'; at: number };
+/** msgId: the answer that noted it (Nov 20 2026): deleting that question and answer forgets it too. */
+export type PlayEntry = { id: string; kind: PlayKind; text: string; source: 'answer' | 'guide' | 'you'; at: number; msgId?: string };
 export type Playthrough = { entries: PlayEntry[]; deleted: Record<string, number>; clearedAt: number; updatedAt: number; notesInAnswers?: boolean };
 
 /** At most this many of each kind (choices, key items), newest kept: guide ticks never push out choices. */
@@ -37,7 +38,7 @@ const newId = () => `p${Date.now().toString(36)}${Math.random().toString(36).sli
 export const playKey = (game: string) => norm(game).replace(/\s+/g, '-').slice(0, 120) || 'unknown';
 
 /** Add entries (newest first); the same text of the same kind isn't added twice. Capped at PLAY_MAX. */
-export function addEntries(p: Playthrough, items: { kind: PlayKind; text: string; source: PlayEntry['source'] }[], now = Date.now()): Playthrough {
+export function addEntries(p: Playthrough, items: { kind: PlayKind; text: string; source: PlayEntry['source']; msgId?: string }[], now = Date.now()): Playthrough {
   const have = new Set(p.entries.map((e) => `${e.kind}:${norm(e.text)}`));
   const fresh: PlayEntry[] = [];
   for (const it of items) {
@@ -45,7 +46,7 @@ export function addEntries(p: Playthrough, items: { kind: PlayKind; text: string
     const k = `${it.kind}:${norm(text)}`;
     if (text.length < 3 || have.has(k) || (it.kind !== 'choice' && it.kind !== 'found')) continue;
     have.add(k);
-    fresh.push({ id: newId(), kind: it.kind, text, source: it.source, at: now });
+    fresh.push({ id: newId(), kind: it.kind, text, source: it.source, at: now, ...(it.msgId ? { msgId: it.msgId } : {}) });
   }
   if (!fresh.length) return p;
   return { ...p, entries: capKinds([...fresh, ...p.entries]), updatedAt: now };
@@ -59,6 +60,13 @@ export function editEntry(p: Playthrough, id: string, text: string, now = Date.n
 
 export function removeEntry(p: Playthrough, id: string, now = Date.now()): Playthrough {
   return { ...p, entries: p.entries.filter((e) => e.id !== id), deleted: { ...p.deleted, [id]: now }, updatedAt: now };
+}
+
+/** What these answers noted is forgotten (their question and answer were deleted); everything else stays. */
+export function forgetAnswers(p: Playthrough, msgIds: string[], now = Date.now()): Playthrough {
+  const gone = p.entries.filter((e) => e.msgId && msgIds.includes(e.msgId));
+  if (!gone.length) return p;
+  return { ...p, entries: p.entries.filter((e) => !gone.includes(e)), deleted: { ...p.deleted, ...Object.fromEntries(gone.map((e) => [e.id, now])) }, updatedAt: now };
 }
 
 export function clearPlaythrough(p: Playthrough, now = Date.now()): Playthrough {

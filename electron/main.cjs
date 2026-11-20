@@ -1664,6 +1664,10 @@ ipcMain.on('quick-menu-items', (event, { items, strings } = {}) => {
 
 // An answer arrived (the app sends every new one). Asked from the quick menu over the game with the panel away (within
 // two minutes, or while the card is up): it goes on the answer card, and the game keeps focus.
+// A question and answer deleted in the app: the card forgets it ("Last card" never brings it back).
+ipcMain.on('answer-forget', (event, id) => {
+  if (answerCard) answerCard.forget(String(id || ''));
+});
 ipcMain.on('answer-arrived', (event, a) => {
   if (isAppVisible || !answerCard) return;
   if (answerCard.update(a)) return; // the same answer, its picture arrived

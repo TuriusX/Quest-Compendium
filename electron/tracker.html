@@ -523,7 +523,7 @@
     loadSteps: "Load the guide's steps", loadStepsHint: "The guide covers this quest: its steps become your objectives (no question used)",
     unloadSteps: "Back to your answer's objectives", dismissOffer: 'Not now', part: 'Part {n} of {total}',
     logNow: 'Now', logNext: 'Next', logWatch: 'Watch out', logFromGuide: 'From the guide', logFromQuestion: 'Your question',
-    logShowMore: 'Show more', logShowLess: 'Show less', logPinned: 'Pinned', logDone: 'Done: {goal}',
+    logShowMore: 'Show more', logShowLess: 'Show less', logPinned: 'Saved', logDone: 'Done: {goal}',
     logWhatsNext: "What's next?", logInvite: 'What are you trying to do?', logInviteSub: "Ask, and the answer's steps become your checklist here.",
     logAsk: 'Ask', logUndo: 'Undo', logTicked: 'Ticked: {step}', logHideWatch: 'Hide this warning for this save', putBack: 'Put back in the overlay',
     logProgress: '{n} of {total}', logTick: 'Tick', logTitle: 'Quest log',
@@ -669,7 +669,7 @@
       h += `<span class="lbtn" data-act="ask">${esc(L('logAsk'))}</span></div>`;
     }
     if (lg.watch) h += `<div class="lwatch"><div class="llab w">${esc(L('logWatch'))}${lg.watch.fromGuide ? `<span class="src">${esc(L('secMissable'))}</span>` : ''}</div><div class="wb"><span class="wi">⚠</span><div><b>${esc(lg.watch.text)}</b>${lg.watch.why && lg.watch.why !== lg.watch.text ? ` · ${esc(lg.watch.why)}` : ''}</div><span class="wx" data-hide="${esc(lg.watch.id)}" title="${esc(L('logHideWatch'))}">✕</span></div></div>`;
-    if (lg.pins) h += `<div class="lrow lpins" data-act="pins">📌 ${esc(L('logPinned'))}<span class="c">${lg.pins}</span></div>`;
+    if (lg.pins) h += `<div class="lrow lpins" data-act="pins">🔖 ${esc(L('logPinned'))}<span class="c">${lg.pins}</span></div>`;
     if (lg.earlier && lg.earlier.length) {
       h += `<div class="lrow" data-act="earlier">↺ ${esc(L('logEarlier'))}<span class="c">${lg.earlier.length} ${state.earlierOpen ? '▾' : '▸'}</span></div>`;
       if (state.earlierOpen) h += `<div class="learlier">${lg.earlier.map((e) => `<div data-act="bring-back" data-id="${esc(e.id)}" title="${esc(L('logBringBack'))}">${esc(e.text)}</div>`).join('')}</div>`;

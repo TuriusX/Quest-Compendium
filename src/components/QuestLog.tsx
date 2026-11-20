@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Pin, Check, AlertTriangle, ChevronRight, ChevronDown, ChevronLeft, ExternalLink, PanelRightClose, Crosshair, MapPin } from './icons';
+import { X, Bookmark, Check, AlertTriangle, ChevronRight, ChevronDown, ChevronLeft, ExternalLink, PanelRightClose, Crosshair, MapPin } from './icons';
 import { useT } from '../i18n';
 import type { LogStep, LogView } from '../utils/questLogView';
 import { VisualCard, type VisualData, type VisualEvent } from './VisualCard';
@@ -466,7 +466,7 @@ export function QuestLog(p: QuestLogProps) {
             <>
               <button type="button" onClick={() => setShowPins((x) => !x)} aria-expanded={showPins}
                 className="flex items-center gap-2 py-2 border-t border-white/[0.07] text-[12.5px] font-semibold text-zinc-400 hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white">
-                <Pin className="w-3.5 h-3.5 text-[var(--accent-color)]" />{t('tracker.logPinned')}
+                <Bookmark className="w-3.5 h-3.5 text-[var(--accent-color)]" fill="currentColor" />{t('tracker.logPinned')}
                 <span className="ml-auto font-mono text-[11px] text-zinc-500">{pinsN}</span>
                 {showPins ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
               </button>

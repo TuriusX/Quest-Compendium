@@ -68,16 +68,24 @@ export async function loadCloudSpaces(uid: string): Promise<SpacesState | null> 
   return s;
 }
 
-/** Every message of both copies (by id, the fuller text), by time; a playthrough's own fields from the newer copy. */
-function mergePt(a: GamePlaythrough, b: GamePlaythrough): GamePlaythrough {
+/**
+ * Every message of both copies (by id, the fuller text), by time, except deleted ones (deletedMsgs of either copy; a
+ * question and answer the player deleted, Nov 20 2026); a playthrough's own fields from the newer copy.
+ */
+export function mergePt(a: GamePlaythrough, b: GamePlaythrough): GamePlaythrough {
   const [newer, older] = (b.lastActive || 0) > (a.lastActive || 0) ? [b, a] : [a, b];
+  const deletedMsgs: Record<string, number> = { ...(a.deletedMsgs || {}) };
+  for (const [id, at] of Object.entries(b.deletedMsgs || {})) deletedMsgs[id] = Math.max(deletedMsgs[id] || 0, at);
   const byId = new Map<string, ChatMessage>();
   for (const m of [...older.messages, ...newer.messages]) {
-    if (!m?.id) continue;
+    if (!m?.id || deletedMsgs[m.id] !== undefined) continue;
     const had = byId.get(m.id);
     byId.set(m.id, !had ? m : { ...had, ...m, ...(String(had.text || '').length > String(m.text || '').length ? { text: had.text } : {}), imageUrl: m.imageUrl || had.imageUrl, audioBase64: (m as any).audioBase64 || (had as any).audioBase64 } as ChatMessage);
   }
-  return { ...newer, messages: [...byId.values()].sort((x, y) => (x.timestamp || 0) - (y.timestamp || 0)), lastActive: Math.max(a.lastActive || 0, b.lastActive || 0) };
+  return {
+    ...newer, messages: [...byId.values()].sort((x, y) => (x.timestamp || 0) - (y.timestamp || 0)), lastActive: Math.max(a.lastActive || 0, b.lastActive || 0),
+    ...(Object.keys(deletedMsgs).length ? { deletedMsgs } : {}),
+  };
 }
 
 export function mergeSpaces(local: SpacesState, cloud: SpacesState | null): SpacesState {
