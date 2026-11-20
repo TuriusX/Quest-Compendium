@@ -23,7 +23,7 @@
  * game and shows a clear glass orb in the theme's colour (nothing inside: owner, Nov 19 2026) in the card's corner, in place of the book spine and the quest log's
  * ribbon at the screen edge. Cards grow out of it and fold back into it (answerCard.html draws both, the orb in WebGL).
  * A left click brings the last card back (never read aloud; with none yet, a line on how to ask); a right click opens
- * its menu (Open Quest Compendium, Quest log, Ask a question, Mute read-aloud, Hide until next answer: opts.onOrb). A
+ * its menu (Open Quest Compendium, Quest log, Open the wheel, Mute read-aloud, Hide until next answer: opts.onOrb). A
  * card whose time ran out leaves a dot on the orb. The state is electron/orbState.cjs.
  *   Why one window: the orb and the card are the same thing on screen (the card is the orb, opened), so the morph is
  * one page animating one shape, with nothing to line up between windows. While the orb is on, the window keeps the
