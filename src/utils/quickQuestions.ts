@@ -3,7 +3,7 @@
  * what shows in the conversation; the app also sends the id, and the server adds the instruction below to the AI's
  * prompt, so a two-word chip gets a well-aimed answer (in the player's language, like any other).
  */
-export type QuickId = 'next' | 'stuck' | 'missable' | 'fight' | 'gear' | 'choice' | 'leave' | 'keep' | 'after' | 'where';
+export type QuickId = 'next' | 'stuck' | 'missable' | 'fight' | 'gear' | 'choice' | 'leave' | 'keep' | 'after' | 'where' | 'here';
 
 /** Every question a player can start with (the controller's list, and the chips' "More"), in this order. */
 export const QUICK_MAIN: QuickId[] = ['next', 'missable', 'fight', 'gear', 'stuck'];
@@ -68,6 +68,13 @@ export const QUICK_PROMPTS: Record<QuickId, string> = {
   after:
     'The player asks what comes after your last answer. Continue from it: the next step or objective once they have ' +
     'done what you said, in the same concrete style. Do not repeat what you already told them.',
+  // Help me here (owner, Nov 21 2026): the app found where the player is and their objective; this asks how to do it
+  // now. Not a chip: sent by the Help me here button and shortcut.
+  here:
+    'The player pressed Help me here. The question says where the app found they are and the objective it set. From ' +
+    'the screenshot, tell them concretely how to do that objective right now: exactly where to go or look (landmarks ' +
+    'on screen, directions), what to do there, and anything worth grabbing on the way that is easy to miss. Mark it ' +
+    'on screen when it is visible. If the screenshot shows they have already done it, say so and give the next step.',
   where:
     'The player asks you to show them on screen. Using this screenshot, place markers on the exact things your last ' +
     'answer was about (where to go, what to use, what to pick up, which enemy to target). Keep the text short: one ' +

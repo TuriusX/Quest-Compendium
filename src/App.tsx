@@ -1151,7 +1151,20 @@ export default function App() {
         if (v && !v.locating && v.place?.name === placeName) { now = v.now; if (now) break; }
       }
       const goal = now ? String(now.text || now.goal || '').trim() : '';
-      const noteId = say(goal ? tr('help.done', { place: placeName, goal }) : tr('help.doneNoGoal', { place: placeName }), now ? { helpFor: now.id } : {});
+      // Owner, Nov 21 2026 ("You're at X. Now: Y" isn't very helpful): with an objective, Help me here asks how to do
+      // it, from a fresh screenshot, as a real question (Fast; the server answers with Pro when Fast is used up). Its
+      // answer pops up over the game like any question, with markers and a visual. With no questions left today: the
+      // note below, with the step's own where / how line from the guide.
+      const bal = balancesOf(userData);
+      const api = (window as any).electronAPI;
+      if (goal && (bal.fast > 0 || bal.pro > 0)) {
+        showLocateNote(tr('help.doneShort', { goal }));
+        const shot: string | null = api?.takeScreenshot ? await Promise.race([api.takeScreenshot().catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), 4000))]) : null;
+        await handleSendMessage(tr('help.askQ', { goal: goal.replace(/[.?!]+$/, ''), place: placeName }), shot || undefined, undefined, 'flash', 'here');
+        return;
+      }
+      const how = now ? String(now.sub || '').trim() : '';
+      const noteId = say(goal ? (how ? tr('help.doneHow', { place: placeName, goal: goal.replace(/[.?!]+$/, ''), how: how.replace(/^./, (c) => c.toUpperCase()).replace(/([^.?!])$/, '$1.') }) : tr('help.done', { place: placeName, goal })) : tr('help.doneNoGoal', { place: placeName }), now ? { helpFor: now.id } : {});
       showLocateNote(goal ? tr('help.doneShort', { goal }) : tr('help.doneNoGoalShort', { place: placeName }));
       if (goal) {
         const token = user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken().catch(() => null) : (user as any)?.isGuest ? String((user as any).uid) : null;

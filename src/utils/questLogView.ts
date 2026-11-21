@@ -184,14 +184,22 @@ export function buildLogView(
     const steps = objSteps.map(({ st, i }) => stepOf(obj, st, i, ticked));
     const open = steps.filter((s) => !s.done && !passed.has(s.id));
     const goal = answerTitle(obj);
+    // Left behind (owner, Nov 21 2026: "Loot the Eldritch Rune", asked about aboard the Nautiloid, was still Now on the
+    // Ravaged Beach): the player is now in another area than the one the answer was about, and none of its open steps
+    // name where they are. It quietly steps aside (the guide fills in); back in its area, it's Now again.
+    const here = tab?.place?.name || '';
+    const askedAt = obj.place?.name || '';
+    const leftBehind = !!here && !!askedAt && !samePlace(here, askedAt)
+      && !open.some((s) => { const w = `${s.text} ${s.sub || ''} ${s.detail || ''}`.toLowerCase(); return w.includes(here.toLowerCase().split(',')[0].trim()); });
+    if (leftBehind) { /* nothing from this objective here */ }
     // Every open step moved on from: the objective has ended (not done), and the guide fills in below.
-    if (!open.length && steps.some((s) => !s.done)) { /* nothing from this objective */ }
+    else if (!open.length && steps.some((s) => !s.done)) { /* nothing from this objective */ }
     else if (!open.length) done = { goal, msgId: obj.id };
     else {
       now = { ...open[0], source: 'question', goal, doneCount: steps.filter((s) => s.done).length, total: steps.length, msgId: obj.id };
       next = open.slice(1, 1 + NEXT_MAX);
     }
-    (obj.steps || []).forEach((st, i) => {
+    if (!leftBehind) (obj.steps || []).forEach((st, i) => {
       if (st.kind === 'warning') watch.push({ id: `s:${obj.id}:${i}`, text: st.label || st.text, why: st.label && st.text !== st.label ? st.text : st.detail });
     });
   } else if (opts.loaded && opts.loaded.items.length) {

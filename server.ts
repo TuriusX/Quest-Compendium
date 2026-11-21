@@ -1557,6 +1557,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         const earlier = guideAreas.slice(Math.max(0, areaIndex - 8), areaIndex);
         situationalContext += `\n[GUIDE ORDER: the player is in ${guideAreas[areaIndex]}, area ${areaIndex + 1} of ${guideAreas.length} in the guide's order. Steps, fights and events in earlier areas (${areaIndex > 8 ? '…, ' : ''}${earlier.join(', ')}) are assumed done, including the way into ${guideAreas[areaIndex]} (its gate, entrance or approach, and any fight there): never send the player back, tell them to go to or approach those places, or prepare them for those fights, even if earlier messages in this conversation did, unless they ask about it.]\n`;
       }
+      // The player's situation from the story point (owner, Nov 21 2026: right after BG3's crash an answer said "if you've
+      // already recruited companions…" when every player lands alone, with Shadowheart on screen).
+      if (place && !site) {
+        situationalContext += `\n[STORY STATE: work out what is true for every player at this point of the game from where they are (the area, the story beat, the guide order, what's done, this conversation) and from the screenshot (party portraits, characters standing nearby, the HUD), e.g. who is in the party, what they carry, which quests are open. State it plainly as fact ("you're on your own after the crash; Shadowheart is just to your right") instead of hedging with "if you've already…" about things this point settles. Where it isn't fully settled, assume the usual state for a player at this point (what most players have just done and have) and answer for that, with at most one short "if not" aside; never build the answer around the unusual case.]\n`;
+      }
       // Progress memory: what the player has already done in this game (the app's list, most recent first).
       const doneList: string[] = (Array.isArray(req.body.done) ? req.body.done : [])
         .map((x: unknown) => String(x ?? '').replace(/\s+/g, ' ').trim().slice(0, 130))

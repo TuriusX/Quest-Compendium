@@ -309,6 +309,17 @@ test("a question's objective: the guide step it is about (question, answer, else
   assert.equal(v4.now?.guide, undefined);
 });
 
+test("a question's objective left behind in another area steps aside; back there, it's Now again (Nov 21 2026)", () => {
+  const ans = { id: "r1", role: "assistant", text: "You can read them.", timestamp: 2, title: "Read the Eldritch Runes", place: { name: "Nautiloid", confirmed: true },
+    steps: [{ kind: "step", text: "Loot the Eldritch Rune", label: "Loot the Eldritch Rune" }] } as any;
+  const tab = (place: string) => ({ id: "t", name: "BG3", place: { name: place, confirmed: true }, questLog: { now: "r1" }, messages: [{ id: "q", role: "user", text: "What are the eldritch runes?", timestamp: 1 }, ans] }) as any;
+  assert.equal(buildLogView(tab("Nautiloid"), null, opts)!.now?.text, "Loot the Eldritch Rune");
+  assert.equal(buildLogView(tab("Ravaged Beach"), null, opts)?.now ?? null, null, "gone on the beach");
+  // An objective whose steps lead to the new area stays.
+  const go = { ...ans, steps: [{ kind: "step", text: "Walk north to the Emerald Grove", label: "Reach the Emerald Grove" }], place: { name: "Ravaged Beach", confirmed: true } };
+  assert.equal(buildLogView({ ...tab("Emerald Grove"), messages: [go] } as any, null, opts)!.now?.text, "Reach the Emerald Grove");
+});
+
 test("which questions are about what the player is doing now (when the server doesn't say), and names in a question", () => {
   for (const q of ["How do I get into the Lower City?", "where do i find the key to the cellar", "I'm stuck at the gate", "how do I beat Margit", "Can't find the way into the castle"]) assert.equal(isNowQuestion(q), true, q);
   for (const q of ["What does the Rusty Key do?", "Who is Ranni?", "What's the best build for a mage?", "Is the DLC worth it?", "Tell me the lore of the Erdtree", "How long is the game?"]) assert.equal(isNowQuestion(q), false, q);
