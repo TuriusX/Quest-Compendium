@@ -12,7 +12,8 @@ import fs from 'fs';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { gemini } from '../../guides/common';
-import { HarmBlockThreshold, HarmCategory, ThinkingLevel } from '@google/genai';
+import { GoogleGenAI, HarmBlockThreshold, HarmCategory, ThinkingLevel } from '@google/genai';
+import { WHAT_NEXT_IN_FULL_V1 as WHAT_NEXT_IN_FULL, WHAT_NEXT_IN_FULL_V2, WHAT_NEXT_IN_FULL_V3 } from '../../../searchPolicy';
 
 const DIR = 'scratchpad/model-compare';
 const OUT = process.env.RESULTS || `${DIR}/results-providers.jsonl`;
@@ -23,8 +24,22 @@ const PRICE: Record<string, { in: number; out: number; search: number; est: numb
   'gpt-6-luna': { in: 0.1, out: 0.5, search: 0.01, est: 0.06 },
   'gemini-3.1-pro-preview': { in: 2, out: 12, search: 0.014, est: 0.14 },
   'claude-sonnet-5-5': { in: 2, out: 10, search: 0.01, est: 0.18 },
+  // Nov 21 2026 "what next" test (Anthropic's model docs): Opus 5.5 $4/$20, Fable 5.2 $8/$40 per 1M.
+  'claude-opus-5-5': { in: 4, out: 20, search: 0.01, est: 0.3 },
+  'claude-fable-5-2': { in: 8, out: 40, search: 0.01, est: 0.5 },
   'gpt-6.2-sol': { in: 2, out: 10, search: 0.01, est: 0.18 },
+  // OpenAI's flagship (Nov 21 2026 "what next" test): $8 in / $40 out per 1M (OpenAI pricing page, released Nov 17).
+  'gpt-6.2-astra': { in: 8, out: 40, search: 0.01, est: 0.5 },
+  // Gemini 4 (Nov 21 2026 "what next" test): launch prices; Carbon and Argon go to $4/$20 on Dec 1.
+  'gemini-4-hydrogen': { in: 1.5, out: 7.5, search: 0.014, est: 0.2 },
+  'gemini-4-neon': { in: 3, out: 15, search: 0.014, est: 0.35 },
+  'gemini-4-carbon': { in: 2, out: 10, search: 0.014, est: 0.25 },
+  'gemini-4-argon': { in: 2, out: 10, search: 0.014, est: 0.25 },
 };
+// A model can carry its thinking level: "gemini-4-neon@high" (Gemini; default low). High is estimated at twice the cost.
+const baseOf = (m: string) => m.split('@')[0];
+const levelOf = (m: string) => (m.split('@')[1] || 'low').toLowerCase();
+const priceOf = (m: string) => { const p = PRICE[baseOf(m)]; return levelOf(m) === 'high' ? { ...p, est: p.est * 2 } : p; };
 // Second run (Nov 19 2026, $6): FAST=gemini-3.8-flash,gpt-6-luna PRO=gemini-3.1-pro-preview,gpt-6.2-sol, then EXTRA
 // (claude-haiku-5-5) if money is left.
 const FAST = (process.env.FAST ?? 'gemini-3.8-flash,claude-haiku-5-5,gpt-6-luna').split(',').filter(Boolean);
@@ -43,7 +58,17 @@ if (process.env.REUSE && !fs.existsSync(OUT)) {
 const MODE = process.env.MODE || 'standard';
 const caps = fs.readFileSync(process.env.CAPTURED || `${DIR}/captured.jsonl`, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
   .map((c) => (MODE === 'standard' ? c : { ...c, id: String(c.id).endsWith(`~${MODE}`) ? String(c.id).slice(0, -MODE.length - 1) : '' }))
-  .filter((c) => /^[rcsd]\d+$/.test(c.id));
+  .filter((c) => /^[rcsdn]\d+$/.test(c.id))
+  // ROUTE=1: the live prompt's last rule (WHAT_NEXT_IN_FULL, Nov 21 2026), which these captures predate.
+  // ROUTE=2: version 2 instead. Newer captures already end with version 1; it is taken out first so each runs once.
+  .map((c) => {
+    const base = String(c.systemInstruction).replace(`\n\n${WHAT_NEXT_IN_FULL}`, '');
+    if (process.env.ROUTE === '1') return { ...c, systemInstruction: `${base}\n\n${WHAT_NEXT_IN_FULL}` };
+    if (process.env.ROUTE === '2') return { ...c, systemInstruction: `${base}\n\n${WHAT_NEXT_IN_FULL_V2}` };
+    if (process.env.ROUTE === '3') return { ...c, systemInstruction: `${base}\n\n${WHAT_NEXT_IN_FULL_V3}` };
+    if (process.env.ROUTE === '0') return { ...c, systemInstruction: base };
+    return c;
+  });
 const done = new Set(fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((x) => !x.error).map((x) => `${x.id}|${x.model}`) : []);
 const reusedPro = new Map<string, any>();
 if (fs.existsSync(`${DIR}/results-hydrogen.jsonl`)) {
@@ -57,12 +82,15 @@ if (fs.existsSync(`${DIR}/results-hydrogen.jsonl`)) {
 type Part = { text?: string; inlineData?: { mimeType: string; data: string } };
 const turns = (c: any) => (c.contents as { role: string; parts: Part[] }[]).map((t) => ({ role: t.role === 'model' ? 'assistant' : 'user', parts: t.parts }));
 
-const g: any = gemini();
+// OWN_GEMINI=1 (owner OK, Nov 21 2026, "what next" test): a plain client whose searches don't draw on the pipeline's
+// month share (it was used up); they still count against this run's hard stop (STOP_DOLLARS), never the players' share.
+const g: any = process.env.OWN_GEMINI === '1' ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : gemini();
 const safety = [HarmCategory.HARM_CATEGORY_HATE_SPEECH, HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, HarmCategory.HARM_CATEGORY_HARASSMENT].map((category) => ({ category, threshold: HarmBlockThreshold.BLOCK_NONE }));
-async function askGemini(model: string, c: any) {
+const LEVELS: Record<string, ThinkingLevel> = { low: ThinkingLevel.LOW, medium: ThinkingLevel.MEDIUM, high: ThinkingLevel.HIGH };
+async function askGemini(spec: string, c: any) {
   const r = await g.models.generateContent({
-    model, contents: c.contents,
-    config: { systemInstruction: c.systemInstruction, safetySettings: safety, temperature: c.temperature, maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }, ...(c.withSearch ? { tools: [{ googleSearch: {} }] } : {}) },
+    model: baseOf(spec), contents: c.contents,
+    config: { systemInstruction: c.systemInstruction, safetySettings: safety, temperature: c.temperature, maxOutputTokens: 16384, thinkingConfig: { thinkingLevel: LEVELS[levelOf(spec)] || ThinkingLevel.LOW }, ...(c.withSearch ? { tools: [{ googleSearch: {} }] } : {}) },
   });
   const u = r.usageMetadata || {};
   return { text: String(r.text || ''), inTok: Number(u.promptTokenCount || 0), outTok: Number(u.candidatesTokenCount || 0) + Number(u.thoughtsTokenCount || 0), searches: (r.candidates?.[0]?.groundingMetadata?.webSearchQueries || []).length };
@@ -117,7 +145,7 @@ async function askOpenAI(model: string, c: any) {
   return { text: String(r.output_text || ''), inTok: Number(u.input_tokens || 0), outTok: Number(u.output_tokens || 0), searches: (r.output || []).filter((o: any) => o.type === 'web_search_call').length };
 }
 
-const once = (model: string, c: any) => (model.startsWith('gemini') ? askGemini(model, c) : model.startsWith('claude') ? askClaude(model, c) : askOpenAI(model, c));
+const once = (model: string, c: any) => (model.startsWith('gemini') ? askGemini(model, c) : model.startsWith('claude') ? askClaude(baseOf(model), c) : askOpenAI(baseOf(model), c));
 const blank = (t: string) => !t.replace(/(?:```[a-z]*\s*)?<qc-[a-z-]+[^>]*>[\s\S]*?<\/qc-[a-z-]+>(?:\s*```)?/gi, '').replace(/<qc-[a-z-]+[^>]*\/>/gi, '').trim();
 // As the app does: an answer that only asks for a search ("ask" mode, <qc-search/>) is asked again with search on;
 // a blank answer is asked once more.
@@ -131,7 +159,7 @@ async function ask(model: string, c: any) {
 }
 
 // The hard stop covers every run into this results file, not just this one.
-let total = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).reduce((n, x) => n + (x.reused ? 0 : x.error ? PRICE[x.model]?.est / 2 || 0 : Number(x.cost || 0)), 0) : 0;
+let total = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).reduce((n, x) => n + (x.reused ? 0 : x.error ? (PRICE[baseOf(x.model)]?.est || 0) / 2 : Number(x.cost || 0)), 0) : 0;
 if (process.env.ONLY) caps.splice(0, caps.length, ...caps.filter((c) => process.env.ONLY!.split(',').includes(c.id)));
 async function run(model: string, c: any) {
   if (done.has(`${c.id}|${model}`)) return true;
@@ -140,7 +168,7 @@ async function run(model: string, c: any) {
     fs.appendFileSync(OUT, JSON.stringify({ id: c.id, model, tier: 'pro', reused: true, text: x.text, ms: x.totalMs, inTok: x.inTok, outTok: x.outTok, searches: x.searches, cost: x.tokenCost[0] + x.searchCost }) + '\n');
     return true;
   }
-  const p = PRICE[model];
+  const p = priceOf(model);
   if (total + p.est > STOP) { console.log(`hard stop: $${total.toFixed(3)} spent, the next could pass $${STOP}`); return false; }
   const t0 = Date.now();
   try {

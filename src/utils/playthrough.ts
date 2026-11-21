@@ -16,7 +16,14 @@
 export type PlayKind = 'choice' | 'found';
 /** msgId: the answer that noted it (Nov 20 2026): deleting that question and answer forgets it too. */
 export type PlayEntry = { id: string; kind: PlayKind; text: string; source: 'answer' | 'guide' | 'you'; at: number; msgId?: string };
-export type Playthrough = { entries: PlayEntry[]; deleted: Record<string, number>; clearedAt: number; updatedAt: number; notesInAnswers?: boolean };
+/**
+ * The save right now (owner, Nov 21 2026: an answer told a Dark Urge player with only Shadowheart to "bring any recruited
+ * companions from camp"): who the player is, their party, where they are in the story and the threads still open, kept
+ * up to date by its own small call after every answer (POST /api/save-state) and sent with every question. The player
+ * can edit any line (`edited`: the update keeps what they wrote unless the game clearly moved on).
+ */
+export type SaveState = { who: string; party: string; story: string; open: string[]; at: number; edited?: number };
+export type Playthrough = { entries: PlayEntry[]; deleted: Record<string, number>; clearedAt: number; updatedAt: number; notesInAnswers?: boolean; state?: SaveState };
 
 /** At most this many of each kind (choices, key items), newest kept: guide ticks never push out choices. */
 export const PLAY_MAX = 20;
@@ -29,6 +36,31 @@ export const PLAY_TEXT_MAX = 160;
 export const PLAY_CONTEXT_MAX = 1200;
 export const PLAYTHROUGH_EVENT = 'qc-playthrough';
 export const OPEN_PLAYTHROUGH_EVENT = 'qc-open-playthrough';
+
+export const SAVE_FIELD_MAX = 200;
+export const SAVE_OPEN_MAX = 6;
+const cleanField = (v: unknown, max = SAVE_FIELD_MAX) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+/** A save state from anywhere (the server's update, the account's copy, the panel): trimmed and capped, or null. */
+export function cleanState(v: any, now = Date.now()): SaveState | null {
+  if (!v || typeof v !== 'object') return null;
+  const open = (Array.isArray(v.open) ? v.open : []).map((x: unknown) => cleanField(x, 120)).filter((x: string) => x.length >= 3).slice(0, SAVE_OPEN_MAX);
+  const st: SaveState = { who: cleanField(v.who, 160), party: cleanField(v.party), story: cleanField(v.story), open, at: Number(v.at) || now, ...(Number(v.edited) ? { edited: Number(v.edited) } : {}) };
+  return st.who || st.party || st.story || st.open.length ? st : null;
+}
+/** The player edits one line of the save (open: the whole list). Saved as theirs (`edited`). */
+export function editState(p: Playthrough, patch: Partial<Pick<SaveState, 'who' | 'party' | 'story' | 'open'>>, now = Date.now()): Playthrough {
+  const base: SaveState = p.state || { who: '', party: '', story: '', open: [], at: now };
+  const st = cleanState({ ...base, ...patch, at: now, edited: now }, now);
+  const { state: _old, ...rest } = p;
+  return { ...rest, ...(st ? { state: st } : {}), updatedAt: now };
+}
+/** The update after an answer: replaces the save state (an older answer arriving late never wins over a newer edit). */
+export function setState(p: Playthrough, next: unknown, askedAt: number, now = Date.now()): Playthrough {
+  const st = cleanState({ ...(next as object), at: now }, now);
+  if (!st || (p.state && Math.max(p.state.at, p.state.edited || 0) > askedAt)) return p;
+  if (p.state?.edited) st.edited = p.state.edited;
+  return { ...p, state: st, updatedAt: now };
+}
 
 export const emptyPlaythrough = (): Playthrough => ({ entries: [], deleted: {}, clearedAt: 0, updatedAt: 0 });
 const clean = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, PLAY_TEXT_MAX);
@@ -92,19 +124,26 @@ export function mergePlaythrough(a: Playthrough, b: Playthrough): Playthrough {
     clearedAt,
     updatedAt: Math.max(a.updatedAt || 0, b.updatedAt || 0),
     ...(newer.notesInAnswers === false ? { notesInAnswers: false } : {}),
+    ...(() => {
+      // The save state: the newer one (by when it was last updated or edited), unless it predates "Clear this game".
+      const pick = [a.state, b.state].filter((x): x is SaveState => !!x && Math.max(x.at, x.edited || 0) >= clearedAt)
+        .sort((x, y) => Math.max(y.at, y.edited || 0) - Math.max(x.at, x.edited || 0))[0];
+      return pick ? { state: pick } : {};
+    })(),
   };
 }
 
 /** What a question sends: choices first, then what was found, then the player's notes; at most PLAY_CONTEXT_MAX characters. */
-export function playthroughForRequest(p: Playthrough | null | undefined, notes?: string): { choices: string[]; found: string[]; notes: string } | null {
+export function playthroughForRequest(p: Playthrough | null | undefined, notes?: string): { choices: string[]; found: string[]; notes: string; state?: Omit<SaveState, 'at' | 'edited'> } | null {
   if (!p) return null;
+  const st = p.state ? { who: p.state.who, party: p.state.party, story: p.state.story, open: p.state.open } : undefined;
   let room = PLAY_CONTEXT_MAX;
   const take = (list: string[]) => list.filter((t) => (room -= t.length + 3) >= 0);
   const choices = take(p.entries.filter((e) => e.kind === 'choice').map((e) => e.text));
   const found = take(p.entries.filter((e) => e.kind === 'found').map((e) => e.text));
   // The Notes are rich text: only their words go.
   const n = p.notesInAnswers === false ? '' : String(notes || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().slice(0, Math.max(0, room));
-  return choices.length || found.length || n ? { choices, found, notes: n } : null;
+  return choices.length || found.length || n || st ? { choices, found, notes: n, ...(st ? { state: st } : {}) } : null;
 }
 
 // ---- storage: this computer, and the account ----

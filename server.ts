@@ -35,7 +35,8 @@ import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor, baseGameKey } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL, openaiModelFor, openaiSiteModel } from './chatRouting';
-import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA } from './searchPolicy';
+import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL } from './searchPolicy';
+import { asksWhatNext } from './src/utils/whatNext';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
 import { currentOffer, currentTrial, trialEligible, trialStep } from './offers';
@@ -63,6 +64,7 @@ import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
 import { CARD_SUMMARY_PROMPT, CARD_SUMMARY_IMMERSIVE, summaryInput, cleanSummary } from './src/utils/cardSummary';
+import { SAVE_STATE_PROMPT, saveStateInput, parseSaveState } from './src/utils/saveState';
 import { SESSION_NOTE_PROMPT, sessionNoteInput, cleanSessionNote, cleanNoteRequest } from './src/utils/earlierSessions';
 import { decidePremium, stripeViewFor, cachedStripeView, forgetStripeView } from './premium';
 import { recordDailyCost, recordLimitHit, recordAnswerGame } from './searchGuard';
@@ -1583,6 +1585,26 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           notes ? `their own notes: ${notes}` : '',
         ].filter(Boolean);
         if (parts.length) situationalContext += `\n[YOUR PLAYTHROUGH (what the player's save looks like; they can see and edit this): ${parts.join('. ').slice(0, 1400)}. Fit the answer to it, but trust a newer screenshot or what the player says over it.]\n`;
+        // The save right now (owner, Nov 21 2026; src/utils/playthrough.ts SaveState): kept up to date after every answer
+        // by /api/save-state, across sessions, so answers know the party and the story without guessing.
+        const st = play.state && typeof play.state === 'object' ? play.state : null;
+        if (st) {
+          const f = (v: unknown, n = 200) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+          const open = (Array.isArray(st.open) ? st.open : []).map((x: unknown) => f(x, 120)).filter(Boolean).slice(0, 6);
+          const lines = [
+            f(st.who, 160) ? `the player's character: ${f(st.who, 160)}` : '',
+            f(st.party) ? `party: ${f(st.party)}` : '',
+            f(st.story) ? `story so far: ${f(st.story)}` : '',
+            open.length ? `still open: ${open.join(' | ')}` : '',
+          ].filter(Boolean);
+          if (lines.length) situationalContext += `\n[THE PLAYER'S SAVE RIGHT NOW (kept up to date from their earlier questions, answers and screenshots, across sessions; they can edit it): ${lines.join('. ')}. Treat it as fact: who is in the party and what has happened are settled, so never write "if you've recruited…", "bring any companions you have" or the like about what this says. Only a newer screenshot or what the player says now overrides it.]\n`;
+        }
+      }
+      // Earlier topics and "what next" (owner, Nov 21 2026: after leaving BG3's Nautiloid an answer added "you don't need
+      // the Eldritch Rune anymore", and "what next" went straight to the Grove fight past Astarion, Gale and Lae'zel).
+      if (!site) {
+        situationalContext += `\n[EARLIER TOPICS: earlier messages are background. A topic from them that no longer matters where the player is now (an item, a puzzle, a place they've left) is dropped silently: never tell the player they no longer need something, can ignore it or can forget it, unless they ask about it.]\n`;
+        situationalContext += `\n[WHAT NEXT: when the player asks what to do next or where to go, give the route a good walkthrough takes from here, in order: first what is still open close by and worth doing before moving on (companions or party members to recruit, key items, short side quests here, from the guide's steps not yet done and the save above), then the fights or dangers on the way with how to handle or avoid them, then the main objective. Don't skip straight to the main objective, and don't send them into a fight without saying it's coming.]\n`;
       }
       if (story?.confirmed) {
         situationalContext += `\n[PLAYER'S CONFIRMED STORY POINT: ${story.text}. The player confirmed this; trust it over your own guess, and only mention what's available at this point.]\n`;
@@ -1766,6 +1788,9 @@ percentages:
         systemInstruction += `\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. If something is unfamiliar, say there isn't enough information about it yet and ask for a screenshot or a detail. Don't mention search limits to the player.`;
       }
       if ((usePro || fastApp) && !site) systemInstruction = withProRules(systemInstruction, searchOk, !!imageBase64, usePro);
+      // Last in the prompt, as in the Nov 21 2026 tests (WHAT_NEXT_IN_FULL in searchPolicy.ts), and only for "what next"
+      // questions: other questions did a little better without it.
+      if (!site && asksWhatNext(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null))) systemInstruction += `\n\n${WHAT_NEXT_IN_FULL}`;
       // Ask mode: the first try has no search, and may ask for it.
       const firstSystem = searchMode === 'ask' && searchOk ? `${systemInstruction}\n\n${ASK_RULES}` : systemInstruction;
       let searchAsked = false;
@@ -2473,6 +2498,59 @@ percentages:
     } catch (err: any) {
       console.log('card summary failed:', err?.message);
       return res.json({ summary: '' });
+    }
+  });
+
+  /**
+   * The save right now (owner, Nov 21 2026; src/utils/saveState.ts): after every answer, the playthrough's record of who
+   * the player is, their party, the story so far and what's still open, updated from the question, the answer, the
+   * screenshot and the guide's steps for this place. Its own small call, so the answer is never changed by it. Flash,
+   * no searches: well under $0.001. Nothing comes back when it fails (the old record stays).
+   */
+  const saveStateCalls = new Map<string, number[]>();
+  app.post('/api/save-state', requireAuth, async (req, res) => {
+    try {
+      const b = req.body || {};
+      const answer = String(b.answer || '');
+      const game = String(b.game || '').slice(0, 160);
+      if (!game || answer.trim().length < 40) return res.json({ state: null });
+      const who = String((req as any).user?.uid || req.ip || 'anon');
+      const now = Date.now();
+      const recent = (saveStateCalls.get(who) || []).filter((t) => now - t < 60_000);
+      if (recent.length >= 20) return res.json({ state: null });
+      recent.push(now);
+      saveStateCalls.set(who, recent);
+      if (saveStateCalls.size > 5000) saveStateCalls.clear();
+      const strs = (v: unknown, n = 30) => (Array.isArray(v) ? v : []).map((x) => String(x ?? '')).filter(Boolean).slice(0, n);
+      const place = typeof b.place === 'string' ? b.place.slice(0, 100) : '';
+      // The guide's steps for this place (ticked ones marked), for what's still open close by.
+      let steps: { title: string; done: boolean }[] = [];
+      if (place) {
+        const pg: any = await guidePageFor(game, place, Number(b.appId) || 0, typeof b.guideKey === 'string' ? b.guideKey : null).catch(() => null);
+        const ticked = new Set(strs(b.guideDone, 300));
+        steps = (Array.isArray(pg?.walkthrough) ? pg.walkthrough : []).filter((s: any) => s && s.title && !s.flagged)
+          .slice(0, 12).map((s: any) => ({ title: String(s.title), done: ticked.has(`walk:${s.id}`) || ticked.has(String(s.id)) }));
+      }
+      const input = saveStateInput({
+        game, question: String(b.question || ''), answer, old: b.old && typeof b.old === 'object' ? b.old : null, place,
+        story: typeof b.story === 'string' ? b.story : '', done: strs(b.done), choices: strs(b.choices), found: strs(b.found), steps,
+      });
+      const shot = typeof b.imageBase64 === 'string' ? b.imageBase64.match(/^data:(image\/[a-z+]+);base64,(.+)$/) : null;
+      const ai = getHelperClient();
+      const r: any = await withTimeout(
+        ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: [{ role: 'user', parts: [...(shot ? [{ inlineData: { mimeType: shot[1], data: shot[2] } }] : []), { text: input }] }],
+          config: { systemInstruction: SAVE_STATE_PROMPT, temperature: 0.1, maxOutputTokens: 700, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+        }),
+        15000,
+        'save state',
+      );
+      logUsage('save-state', 'gemini-3.8-flash', r);
+      return res.json({ state: parseSaveState(r?.text || '') });
+    } catch (err: any) {
+      console.log('save state failed:', err?.message);
+      return res.json({ state: null });
     }
   });
 

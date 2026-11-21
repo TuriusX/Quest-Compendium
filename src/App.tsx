@@ -55,7 +55,7 @@ import { formatShortcut } from './utils/shortcut';
 import { setEntryDone, readDone, exportAllDone, importAllDone, GUIDE_DONE_EVENT } from './utils/guideProgress';
 import { SPOT_EVENT, type SpotRequest } from './utils/spotIt';
 import {
-  addEntries, editEntry, removeEntry, forgetAnswers, clearPlaythrough, mergePlaythrough, playthroughForRequest, readLocal, writeLocal,
+  addEntries, editEntry, removeEntry, forgetAnswers, setState, editState, clearPlaythrough, mergePlaythrough, playthroughForRequest, readLocal, writeLocal,
   emptyPlaythrough, OPEN_PLAYTHROUGH_EVENT, type Playthrough, type PlayKind, type PlayEntry,
 } from './utils/playthrough';
 import { qaPair, logWithout } from './utils/answerFind';
@@ -2269,6 +2269,37 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     });
   };
 
+  /**
+   * The save right now (owner, Nov 21 2026; utils/saveState.ts): after an answer, its own small call (/api/save-state)
+   * updates who the player is, their party, the story so far and what's still open, kept in Your playthrough and sent
+   * with every later question. Never changes the answer; a failure keeps the old record.
+   */
+  const fetchSaveState = async (x: { game: string; askedAt: number; question: string; answer: string; token: string | null; image?: string; place: string; story: string; done: string[] }) => {
+    if (!x.game) return;
+    const p = playRef.current;
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/save-state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(x.token ? { Authorization: `Bearer ${x.token}` } : {}) },
+        body: JSON.stringify({
+          game: x.game, question: x.question, answer: x.answer.slice(0, 8000), place: x.place, story: x.story, done: x.done,
+          ...(x.image && x.image.startsWith('data:image') ? { imageBase64: x.image } : {}),
+          old: p.state ? { who: p.state.who, party: p.state.party, story: p.state.story, open: p.state.open, edited: !!p.state.edited } : null,
+          choices: p.entries.filter((e) => e.kind === 'choice').map((e) => e.text),
+          found: p.entries.filter((e) => e.kind === 'found').map((e) => e.text),
+          guideKey: trackerGameRef.current?.guideKey || undefined,
+          guideDone: trackerGameRef.current?.guideArea ? [...trackerGameRef.current.guideArea.done].slice(0, 300) : [],
+        }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      // Still the same game (the player may have switched tabs while it ran).
+      if (data?.state && playFor.current.endsWith(`:${x.game}`)) updatePlay((cur) => setState(cur, data.state, x.askedAt));
+    } catch {
+      /* the old record stays */
+    }
+  };
+
   const fetchVisual = async (msgId: string, question: string, answer: string, game: string, token: string | null, shotOnly = false) => {
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/visual`, {
@@ -3541,6 +3572,14 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         refineMarkers(aiMessage.id, imageBase64, aiMessage.points, markerGame, token);
       }
       if (aiMessage.summaryPending) void fetchCardSummary(aiMessage.id, text, aiMessage.text, token);
+      // The save right now (Nov 21 2026): updated from this answer by its own call, for every later question.
+      if (memoryOn && !aside && !limitText && aiMessage.text && String(data.text || '').trim().length >= 40) {
+        void fetchSaveState({
+          game: playGame, askedAt: nowAi, question: text, answer: aiMessage.text, token, image: imageBase64 || undefined,
+          place: aiMessage.place?.name || activeTab.place?.name || '', story: aiMessage.place?.story || activeTab.place?.story || '',
+          done: doneForRequest(settings.gameDone?.[gameProgressKey(activeTab)]),
+        });
+      }
       // A video or picture under the answer, if one helps (after the answer, never instead of it).
       // A screenshot or voice message with no typed question gets one too (owner, Nov 14 2026): its question is the app's
       // stand-in text, so the server takes the topic from what the answer is about.
@@ -4357,6 +4396,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 done={settings.gameDone?.[gameProgressKey(activeTab)] || []}
                 onAdd={(kind, text) => updatePlay((p) => addEntries(p, [{ kind, text, source: 'you' }]))}
                 onEdit={(id, text) => updatePlay((p) => editEntry(p, id, text))}
+                onEditState={(patch) => updatePlay((p) => editState(p, patch))}
                 onRemove={(id) => updatePlay((p) => removeEntry(p, id))}
                 onEditDone={(i, text) => editDone(i, text)}
                 onRemoveDone={(i) => editDone(i, null)}

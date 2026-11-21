@@ -186,6 +186,51 @@ No screenshot or image is attached to this question. Never describe, refer to or
 /** In place of the vision rule that had answers open with "I don't see a screenshot", even on questions that don't need one. */
 export const PRO_MISSING_IMAGE = "3. MISSING IMAGE HANDLING: Only if the player directly asks about what's on their screen and no image came with the question, say in one sentence that you don't see a screenshot. Otherwise don't mention screenshots.";
 
+/**
+ * "What next" in full (owner OK, Nov 21 2026). Added at the very end of every app answer's prompt. In the Nov 21 blind
+ * test (12 "what should I do next" questions, 2 checkers each) it lifted gpt-6.2-sol from 6.7 to 7.4-8.1 out of 10 at
+ * the same time and cost, matching every two-model mix that fits in 45 s. It did nothing for gpt-6-luna.
+ */
+export const WHAT_NEXT_IN_FULL_V1 = `[WHAT NEXT, IN FULL]
+When the player asks what to do next or where to go, cover the whole stretch ahead, not just the next step:
+1. Everything worth doing nearby right now, judged from their save and where they are: companions or allies to recruit, side quests that open here, merchants, and gear or items that are easy to miss on the way.
+2. The fights, traps or dangers between them and the next objective, and how to handle or avoid them.
+3. The main objective and where it is.
+Treat their save as fact. Keep it tight: short groups or numbered steps, one or two lines each.`;
+
+/**
+ * Version 2 (Nov 21 2026, from the blind checkers' notes on version 1: skipped nearby recruits, finished missions
+ * recommended again, "where are you now?" endings, a wrong earlier answer left standing, no word when leaving closes
+ * something nearby). Under test against version 1 before it replaces it.
+ */
+export const WHAT_NEXT_IN_FULL_V2 = `[WHAT NEXT, IN FULL]
+When the player asks what to do next or where to go, cover the whole stretch ahead, not just the next step:
+1. Everything worth doing nearby right now, judged from their save and where they are: each companion or ally they can still recruit here (by name), side quests that open here, merchants, and gear or items that are easy to miss on the way.
+2. The fights, traps or dangers between them and the next objective, and how to handle or avoid them.
+3. The main objective and where it is.
+Treat their save and story point as fact: anything that has to be done to reach this point is already done, so don't send them back to it, and don't ask where they are. If moving on closes off something nearby, say so once, briefly. If an earlier answer in this conversation got something wrong that matters now, correct it in one line. Keep it tight: short groups or numbered steps, one or two lines each, and end on the next step rather than a question.`;
+
+/**
+ * Version 3 (Nov 21 2026, owner: it must work for every game, not just RPGs): version 2 plus guards so it never forces
+ * a route where a game has none (roguelikes, life sims, sandboxes, linear games), names recruits only in games that
+ * have them, and asks where the player is only when the app doesn't know.
+ */
+export const WHAT_NEXT_IN_FULL_V3 = `[WHAT NEXT, IN FULL]
+When the player asks what to do next or where to go, cover the whole stretch ahead, not just the next step. Use only the parts that fit this game and question; skip the rest:
+1. Everything worth doing nearby right now, judged from their save and where they are: companions or allies they can still recruit here, by name (only in games that have them), side quests that open here, merchants, and gear or items that are easy to miss on the way.
+2. The fights, traps or dangers between them and the next objective, and how to handle or avoid them.
+3. The main objective and where it is.
+In a game without a story route (a roguelike, a life sim, a sandbox, a multiplayer game), give their best next priorities from where they are instead.
+Treat their save and story point as fact: anything that has to be done to reach this point is already done, so don't send them back to it, and don't ask where they are when their save or place already says. If moving on closes off something nearby, say so once, briefly. If an earlier answer in this conversation got something wrong that matters now, correct it in one line. Keep it tight: short groups or numbered steps, one or two lines each, and end on the next step rather than a question.`;
+
+/**
+ * The live rule: version 3 (Nov 21 2026 blind test, 2 checkers per answer: "what next" 7.35 vs 6.58 for version 1,
+ * 7.50 vs 6.31 on games it wasn't written around, 7.63 vs 7.00 on roguelike / life sim / sandbox / linear games).
+ * Added only to "what next" questions (asksWhatNext, src/utils/whatNext.ts): on other questions it scored a little
+ * lower than no rule (7.65 vs 7.79 on 40 mixed questions).
+ */
+export const WHAT_NEXT_IN_FULL = WHAT_NEXT_IN_FULL_V3;
+
 /** Fast in the app uses the same rules on Flash since Nov 5 2026 (`pro` false: the same words, without saying the player chose Pro). */
 /** The prompt with Pro's rules near the start and again at the very end, after the rules about the quest log and the place. */
 export function withProRules(prompt: string, canSearch: boolean, screenshot = false, pro = true): string {

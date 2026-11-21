@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { X, Plus, Trash2, MapPin, Flag, Gem, CheckSquare, FileText, Target } from './icons';
+import { X, Plus, Trash2, MapPin, Flag, Gem, CheckSquare, FileText, Target, User } from './icons';
 import { useT } from '../i18n';
-import type { Playthrough, PlayKind } from '../utils/playthrough';
+import type { Playthrough, PlayKind, SaveState } from '../utils/playthrough';
 import type { DoneItem } from '../utils/progressMemory';
 
 /**
@@ -21,6 +21,8 @@ type Props = {
   done: DoneItem[];
   onAdd: (kind: PlayKind, text: string) => void;
   onEdit: (id: string, text: string) => void;
+  /** The save right now (Nov 21 2026): the player's edit of one of its lines. */
+  onEditState?: (patch: Partial<Pick<SaveState, 'who' | 'party' | 'story' | 'open'>>) => void;
   onRemove: (id: string) => void;
   onEditDone: (index: number, text: string) => void;
   onRemoveDone: (index: number) => void;
@@ -53,6 +55,28 @@ function Row({ text, onSave, onDelete, label }: { text: string; onSave: (t: stri
         <Trash2 className="w-3.5 h-3.5" />
       </button>
     </li>
+  );
+}
+
+/** One line of the save (character, party, story): edited in place, saved when it loses focus or on Enter. */
+function Field({ text, label, placeholder, onSave }: { text: string; label: string; placeholder: string; onSave: (t: string) => void }) {
+  const [v, setV] = useState(text);
+  useEffect(() => setV(text), [text]);
+  return (
+    <label className="grid grid-cols-[5.5rem_1fr] items-start gap-2">
+      <span className="pt-[7px] text-[11.5px] text-zinc-500">{label}</span>
+      {/* Wraps to as many lines as it needs (a party can be long); Enter saves rather than adding a line. */}
+      <textarea
+        value={v}
+        rows={1}
+        onChange={(e) => setV(e.target.value.replace(/\n/g, ' '))}
+        onBlur={() => v.trim() !== text && onSave(v)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); } }}
+        placeholder={placeholder}
+        maxLength={200}
+        className="w-full min-w-0 min-h-8 px-2 py-1.5 resize-none [field-sizing:content] rounded-md bg-transparent border border-transparent hover:border-white/10 focus:border-[var(--accent-border)] focus:bg-black/30 text-[13px] leading-snug text-zinc-200 placeholder:text-zinc-600 outline-none"
+      />
+    </label>
   );
 }
 
@@ -125,6 +149,23 @@ export function PlaythroughPanel(p: Props) {
               <input value={story} onChange={(e) => setStory(e.target.value)} onBlur={savePlace} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} placeholder={t('play.storyPh')} aria-label={t('play.storyPh')} maxLength={100}
                 className="h-8 px-2 rounded-md bg-black/20 border border-white/10 focus:border-[var(--accent-border)] text-[13px] text-zinc-200 placeholder:text-zinc-500 outline-none" />
             </div>)}
+          {p.onEditState && section(<User className="w-3.5 h-3.5 text-[var(--accent-color)]" />, t('play.save'), t('play.saveHint'),
+            (() => {
+              const st = p.play.state;
+              const open = st?.open || [];
+              return (
+                <div className="grid gap-0.5">
+                  <Field text={st?.who || ''} label={t('play.saveWho')} placeholder={t('play.saveUnknown')} onSave={(v) => p.onEditState!({ who: v })} />
+                  <Field text={st?.party || ''} label={t('play.saveParty')} placeholder={t('play.saveUnknown')} onSave={(v) => p.onEditState!({ party: v })} />
+                  <Field text={st?.story || ''} label={t('play.saveStory')} placeholder={t('play.saveUnknown')} onSave={(v) => p.onEditState!({ story: v })} />
+                  <p className="mt-1.5 text-[11.5px] text-zinc-500">{t('play.saveOpen')}</p>
+                  <ul className="space-y-0.5">{open.map((o, i) => <Row key={`${i}:${o}`} text={o} label={t('play.saveOpen')}
+                    onSave={(v) => p.onEditState!({ open: open.map((x, j) => (j === i ? v : x)).filter((x) => x.trim().length >= 3) })}
+                    onDelete={() => p.onEditState!({ open: open.filter((_, j) => j !== i) })} />)}</ul>
+                  {open.length < 6 && <AddRow placeholder={t('play.saveAddOpen')} onAdd={(v) => p.onEditState!({ open: [...open, v] })} />}
+                </div>
+              );
+            })())}
           {p.objective && section(<Target className="w-3.5 h-3.5 text-[var(--accent-color)]" />, t('play.objective'), t('play.objectiveHint'),
             <div className="flex items-center gap-2 text-[13px] text-zinc-200">
               <span className="flex-1 min-w-0 truncate">{p.objective.goal}</span>
