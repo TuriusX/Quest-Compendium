@@ -863,6 +863,12 @@ async function writePage(target: string, slug: string, pr: any): Promise<boolean
   // Existing entries are kept unless sources contradict them (owner, Oct 22 2026): what the rebuild lost comes back,
   // marked "not yet confirmed", and the live version is saved (a staged build gets the same when promote.ts puts it live).
   const old: any = (await ref.get()).data();
+  // A hand-written page (owner-approved, written from published sources and hand-checked: GTA VI's launch and mission
+  // pages, Nov 18-20 2026) is never replaced by a rebuild; only a person changes it.
+  if (old?.handWritten) {
+    console.log(`  ${target}/${slug} is hand-written: the rebuild is not written over it`);
+    return false;
+  }
   const contradicted = contradictedNames(pr, old);
   const { fields: kept, carried } = carryOver(old, fields, contradicted);
   if (carried.length) console.log(`  kept ${carried.length} entr${carried.length === 1 ? 'y' : 'ies'} from the old page, marked not yet confirmed: ${carried.map((c) => c.name).slice(0, 8).join('; ')}`);

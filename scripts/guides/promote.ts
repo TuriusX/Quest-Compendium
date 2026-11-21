@@ -60,6 +60,13 @@ export async function promote(key: string): Promise<{ published: number; retired
     const was = livePages.get(o.slug);
     const same = !!was && ['draft', 'published'].includes(was.status) && translatableText(was) === translatableText(built);
     const ref = liveRef.collection('areas').doc(o.slug);
+    // A hand-written page (owner-approved, from published sources and hand-checked; Nov 2026) stays as it is: a build
+    // only moves it to its place in the new order.
+    if (was?.handWritten) {
+      batch.update(ref, { order: i });
+      if (++ops >= 400) await flush();
+      continue;
+    }
     let page: any = built;
     if (!same && was && guarded && was.status === 'published' && rebuildVerdict(was, built).hold) {
       // Existing entries are kept unless sources contradict them: what the rebuild lost comes back, not yet confirmed.
@@ -85,7 +92,7 @@ export async function promote(key: string): Promise<{ published: number; retired
     // A page people find in Google isn't retired by a restructure unless the new outline has a page with its name (the
     // redirect would otherwise go to a weakly related page, as Lakay went to Guarma): it stays live, after the new
     // outline's pages.
-    if (d.data().status === 'published' && keepOnRestructure(String(d.data().name || d.id), impressionsOf(d.id), newNames)) {
+    if (d.data().status === 'published' && (d.data().handWritten || keepOnRestructure(String(d.data().name || d.id), impressionsOf(d.id), newNames))) {
       kept.push((Array.isArray(before.areas) ? before.areas : []).find((a: any) => a.slug === d.id) || { slug: d.id, name: d.data().name || d.id });
       batch.update(d.ref, { order: order.length + kept.length - 1 });
       if (++ops >= 400) await flush();
