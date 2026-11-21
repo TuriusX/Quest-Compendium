@@ -1,0 +1,33 @@
+name: Build the SteamOS companion app
+
+# Quest Compendium Companion (electron/companion.cjs): the Linux AppImage for the Steam Deck. Run by hand for now
+# (Actions tab, "Run workflow"); the AppImage is attached to the run as an artifact.
+on:
+  workflow_dispatch:
+
+jobs:
+  build-companion:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          rm -f package-lock.json
+          npm install
+
+      - name: Build the page and the AppImage
+        run: npm run companion:build
+
+      - name: Upload the AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: quest-compendium-companion
+          path: release-companion/*.AppImage
+          if-no-files-found: error

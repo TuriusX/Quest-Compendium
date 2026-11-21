@@ -65,6 +65,7 @@ import { displayGameName } from '../utils/gameName';
 import { showFirstRunHints } from '../utils/sessions';
 import { ENTRY_ICON_PATHS, ENTRY_COLORS, type EntryKind } from '../utils/entryKind';
 import { isGoalAnswer } from '../utils/questLogView';
+import { isCompanion } from '../utils/companion';
 import { TtsPlayer } from '../utils/ttsPlayer';
 import { voiceEnd, rmsOf } from '../utils/voiceEnd';
 import type { Detection } from './DetectionLine';
@@ -364,7 +365,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Ask (the conversation) or Guide (the game's guide, open at where you are). The question box works in both; asking
   // switches back to the answer. The guide stays loaded once opened, so switching back and forth keeps your place.
   // The status strip: where you are and the Ask/Guide switch.
-  const [showTour, setShowTour] = useState(() => !walkthroughDone());
+  // (The tour teaches the desktop's shortcuts and screenshots: not in the companion app.)
+  const [showTour, setShowTour] = useState(() => !walkthroughDone() && !isCompanion());
   // The ⋯ menu's "Quick tour" opens it again.
   useEffect(() => {
     const open = () => setShowTour(true);
@@ -798,6 +800,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   // Live Screen Capture from Game Window (WebRTC DisplayMedia or File Upload Fallback)
   const captureGameScreen = async (): Promise<string | null> => {
+    // The companion app: the game is on the PC, not on this screen (the PC takes the screenshot once it's linked).
+    if (isCompanion()) return null;
     try {
       setIsCapturingScreen(true);
       playSnapSound(soundEnabled);
@@ -1545,8 +1549,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               onChange={handleFileUpload}
             />
 
-            {/* Attach Screenshot / Game Screen */}
-            <button
+            {/* Attach Screenshot / Game Screen (not in the companion app: the game isn't on this screen) */}
+            {!isCompanion() && <button
               type="button"
               onClick={() => {
                 playBlipSound(soundEnabled);
@@ -1572,7 +1576,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               ) : (
                 <Camera className="w-4 h-4" />
               )}
-            </button>
+            </button>}
 
             {/* Push to Talk / Voice Dictation */}
             <button
@@ -1625,7 +1629,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         </div>
         {(() => {
-          const note = modelNote || (firstRunHint ? (isDesktopApp ? t('chat.hintDesktop') : t('chat.hintWeb')) : '');
+          const note = modelNote || (firstRunHint && !isCompanion() ? (isDesktopApp ? t('chat.hintDesktop') : t('chat.hintWeb')) : '');
           return (
             <div role="status" aria-live="polite" className={`${note ? 'mt-2' : ''} text-center text-[10px] font-mono uppercase ${modelNote ? 'text-[var(--accent-color)]' : 'text-zinc-500'}`}>
               {note}

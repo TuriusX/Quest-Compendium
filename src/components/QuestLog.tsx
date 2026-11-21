@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, Bookmark, Check, AlertTriangle, ChevronRight, ChevronDown, ChevronLeft, ExternalLink, PanelRightClose, Crosshair, MapPin } from './icons';
 import { useT, useLocale } from '../i18n';
 import { sessionDay, noteStale, type EarlierSession } from '../utils/earlierSessions';
+import { isCompanion } from '../utils/companion';
 import type { LogStep, LogView } from '../utils/questLogView';
 import { VisualCard, type VisualData, type VisualEvent } from './VisualCard';
 
@@ -210,13 +211,14 @@ export function QuestLog(p: QuestLogProps) {
         <span className="font-mono font-extrabold text-[12px] tracking-[0.14em] uppercase">{t('tracker.logTitle')}</span>
         <span className="flex-1" />
         {/* Detach / Attach, in words (owner, Nov 15 2026: the bare icon wasn't clear). */}
-        <button type="button" data-qc-log-popout={p.popped ? 'back' : 'out'} onClick={p.popped ? p.onPutBack : p.onPopOut}
+        {/* (Not in the companion app: the log is always beside the conversation there.) */}
+        {!isCompanion() && <button type="button" data-qc-log-popout={p.popped ? 'back' : 'out'} onClick={p.popped ? p.onPutBack : p.onPopOut}
           title={t(p.popped ? 'tracker.attach' : 'tracker.popOut')}
           style={{ WebkitAppRegion: 'no-drag' } as any}
           className="h-6 pl-1.5 pr-2 rounded border border-white/10 text-[11.5px] font-semibold text-zinc-300 hover:text-white hover:border-[var(--accent-border)] hover:bg-white/[0.05] flex items-center gap-1 outline-none focus-visible:ring-2 focus-visible:ring-white">
           {p.popped ? <PanelRightClose className="w-3.5 h-3.5" /> : <ExternalLink className="w-3.5 h-3.5" style={p.popLeft ? { transform: 'scaleX(-1)' } : undefined} />}
           {t(p.popped ? 'tracker.putBackShort' : 'tracker.popOutShort')}
-        </button>
+        </button>}
       </div>
 
       {/* Where the player is, at the top: "You're in Rivington · Change" and Locate me (owner, Oct 31 2026). */}
@@ -594,11 +596,11 @@ export function QuestLog(p: QuestLogProps) {
       </div>
 
       {/* The keys, one line. */}
-      <div data-qc-keyhints="" className="flex flex-wrap gap-x-2.5 gap-y-1 px-3.5 py-2 border-t border-white/[0.07] bg-black/20 font-mono text-[10.5px] text-zinc-500">
+      {!isCompanion() && <div data-qc-keyhints="" className="flex flex-wrap gap-x-2.5 gap-y-1 px-3.5 py-2 border-t border-white/[0.07] bg-black/20 font-mono text-[10.5px] text-zinc-500">
         <span><kbd className="qc-log-kbd">Del</kbd> {t('tracker.logKeyRemove')}</span>
         <span><kbd className="qc-log-kbd">↑↓</kbd> {t('tracker.logKeyMove')}</span>
         <span><kbd className="qc-log-kbd">{p.keysLabel}</kbd> {t('tracker.logClose')}</span>
-      </div>
+      </div>}
 
       {/* An item's right-click menu: Remove. */}
       {menu && (

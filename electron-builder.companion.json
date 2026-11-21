@@ -1,0 +1,32 @@
+{
+  "appId": "com.questcompendium.companion",
+  "productName": "Quest Compendium Companion",
+  "extraMetadata": {
+    "main": "electron/companion.cjs"
+  },
+  "directories": {
+    "output": "release-companion",
+    "buildResources": "public"
+  },
+  "icon": "public/icon.png",
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "public/icon.png",
+    "category": "Game",
+    "artifactName": "Quest-Compendium-Companion-${version}.${ext}"
+  },
+  "files": [
+    "dist/**/*",
+    "!dist/server.cjs*",
+    "electron/companion.cjs",
+    "electron/companionPreload.cjs"
+  ],
+  "publish": null
+}

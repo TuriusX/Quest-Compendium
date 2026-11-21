@@ -88,6 +88,7 @@ import { useWorthHere } from './hooks/useWorthHere';
 import { QuestLog } from './components/QuestLog';
 import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, doSteps, isNowQuestion, isCuriosityQuestion, heldIds, HELD_DAYS, type LogView, type Foe } from './utils/questLogView';
 import type { EarlierSession } from './utils/earlierSessions';
+import { isCompanion } from './utils/companion';
 import { padComboLabel, padPreset } from './utils/padGlyphs';
 import { missablesThin } from './utils/missablesCheck';
 
@@ -3841,8 +3842,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
 
   // The docked quest log (owner, Oct 30 2026): a column inside the panel, on its inner side, out while the log is
   // (Ctrl+Shift+L, the controller's View, the bookmark).
-  const logSide: 'left' | 'right' = settings.dockPosition !== 'undocked' && tuckSide === 'left' ? 'right' : 'left';
-  const dockedLogOpen = isDesktop && questLogAttached && questLogVisible && !!logView;
+  // The companion app (SteamOS, Nov 20 2026): full screen, the conversation on the left and the quest log always
+  // beside it on the right.
+  const companion = isCompanion();
+  const logSide: 'left' | 'right' = companion ? 'right' : settings.dockPosition !== 'undocked' && tuckSide === 'left' ? 'right' : 'left';
+  const dockedLogOpen = (isDesktop && questLogAttached && questLogVisible && !!logView) || (companion && !!logView);
   // Popped out (owner, Nov 15 2026): the same log, in its own window over the game (PopWindow, electron/logWindow.cjs).
   const poppedLogOpen = isDesktop && !questLogAttached && questLogVisible && !!logView;
   // Without the docked log there's nothing to fold down to: the chat comes back.
@@ -3880,7 +3884,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       onLoadSteps={() => trackerEventRef.current({ type: 'load-steps' })}
       onDismissOffer={() => trackerEventRef.current({ type: 'dismiss-offer' })}
       onGotoArea={moveToArea}
-      onLocate={() => void runHelpHere()}
+      // (Help me here looks at the game's screen: not in the companion app until it's linked to the PC.)
+      onLocate={companion ? undefined : () => void runHelpHere()}
       onPickPlace={moveToArea}
       locateKeys={formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K')}
       foldMissables={!!worthHere.worth || !!(trackerGame.guideArea?.page as any)?.worth}

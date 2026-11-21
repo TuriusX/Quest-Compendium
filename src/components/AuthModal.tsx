@@ -8,6 +8,8 @@ import { useLocale, useT } from '../i18n';
 import { isPhone } from '../utils/source';
 import { saveGuestHandover } from '../utils/guestHandover';
 import { EmailSignInForm } from './EmailSignInForm';
+import { CodeSignIn } from './CodeSignIn';
+import { isCompanion } from '../utils/companion';
 
 interface AuthModalProps {
   onSignInSuccess: () => void;
@@ -22,6 +24,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
   const isEmbedded = typeof window !== 'undefined' && window.self !== window.top;
   const lang = useLocale();
   const phone = isPhone();
+  const companion = isCompanion();
   // Already a guest (opened from the header button, the sign-in card or Premium): only signing in is offered.
   const alreadyGuest = typeof window !== 'undefined' && !!localStorage.getItem('quest_guest_session');
   const guidesUrl = `https://questcompendium.com/${lang === 'en' ? '' : `${lang}/`}guides/`;
@@ -153,7 +156,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
           </button>
         )}
 
-        <button
+        {/* The companion app (Game Mode has no browser for Google's sign-in): a code to type on a phone or PC instead. */}
+        {companion && <CodeSignIn onSignedIn={onSignInSuccess} />}
+        {!companion && <button
           onClick={handleSignIn}
           disabled={loading}
           className={`w-full flex items-center justify-center gap-3 font-semibold py-3 px-6 rounded-xl transition-all disabled:opacity-50 ${
@@ -181,11 +186,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
             />
           </svg>
           {loading ? t('auth.authenticating') : t('auth.google')}
-        </button>
-        {!isEmbedded && !alreadyGuest && <p className="mt-2 text-[11px] text-zinc-500 leading-snug">{t('auth.googleWhy')}</p>}
+        </button>}
+        {!companion && !isEmbedded && !alreadyGuest && <p className="mt-2 text-[11px] text-zinc-500 leading-snug">{t('auth.googleWhy')}</p>}
 
         {/* Or a one-time sign-in link by email (no password). */}
-        {!isEmbedded && <EmailSignInForm onSignedIn={onSignInSuccess} />}
+        {!isEmbedded && !companion && <EmailSignInForm onSignedIn={onSignInSuccess} />}
 
         {errorMessage && !isEmbedded && !(window as any).electronAPI?.startDesktopLogin && (
           <button
