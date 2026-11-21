@@ -387,6 +387,8 @@ export interface AppSettings {
    * and fold back into, in place of the book spine at the screen edge (default on; off brings the spine back).
    */
   popupOrb?: boolean;
+  /** The orb's look (owner, Nov 21 2026): the glass orb (default) or the app's icon, floating and glowing. */
+  popupOrbStyle?: 'orb' | 'icon';
   /** "Where was I?" (session companion step 1): a recap card when a game starts after a day or more (default on). */
   recapCard?: boolean;
   /** The open combo was moved off View + Menu to L3 + R3 (once, Nov 17 2026; App.tsx). */

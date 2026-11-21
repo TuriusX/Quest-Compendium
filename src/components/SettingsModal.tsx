@@ -469,6 +469,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span className="w-4 h-4 rounded-full bg-white" />
                       </span>
                     </button>
+                    {/* Its look (owner, Nov 21 2026): the glass orb or the app's icon, floating and glowing. */}
+                    {settings.popupOrb !== false && (
+                      <div className="flex items-center gap-2 pl-1" data-qc-orb-style="">
+                        <span className="text-[11px] text-zinc-400 mr-1">{tr('set.orbStyle')}</span>
+                        <div className="grid grid-cols-2 gap-2 flex-1" role="radiogroup" aria-label={tr('set.orbStyle')}>
+                          {(['orb', 'icon'] as const).map((st) => {
+                            const on = (settings.popupOrbStyle === 'icon' ? 'icon' : 'orb') === st;
+                            return (
+                              <button key={st} type="button" role="radio" aria-checked={on}
+                                onClick={() => { playBlipSound(soundEnabled); onUpdateSettings({ popupOrbStyle: st }); }}
+                                className={`p-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${on ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white' : 'bg-black/30 border-white/[0.08] text-zinc-300 hover:border-white/20'}`}>
+                                {tr(`set.orbStyle.${st}`)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     <button
                       type="button"
                       role="switch"

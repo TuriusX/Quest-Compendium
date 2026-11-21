@@ -29,8 +29,8 @@ const fanMath = require('./fanLayout.cjs');
 const FAN_LEAVE_MS = 250; // the mouse away from the fan this long (opened by the mouse): it closes (owner, Nov 20 2026: quickly; was 650)
 const FAN_MENU_GRACE_MS = 1500; // opened from the orb's menu: the mouse has this long to reach it first
 // The mouse still resting on the orb this long after the fan opened: its outer ring opens too (owner, Nov 20 2026:
-// "hovering a bit longer opens the second level", in place of the More button).
-const OUTER_REST_MS = 450;
+// "hovering a bit longer opens the second level", in place of the More button). Nov 21 2026: half a second later.
+const OUTER_REST_MS = 950;
 
 /**
  * @param {{ focusHelper: object, display: () => Electron.Display, whenReleased: () => Promise<void>,

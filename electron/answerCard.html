@@ -152,6 +152,16 @@
             box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 60%, transparent), inset 0 0 12px rgba(255, 255, 255, .25); }
   body.nogl #orbCss { display: block; } body.nogl #orbGl { display: none; }
   body.fan #orbCss { filter: brightness(1.35) drop-shadow(0 0 12px var(--accent)); }
+  /* The app icon instead of the glass orb (owner, Nov 21 2026: players choose): the book floating, glowing in the
+     theme's colour; brighter while the fan is out, its glow pulsing while a card waits. */
+  #orbIcon { display: none; position: absolute; inset: var(--pad); width: var(--d); height: var(--d); image-rendering: pixelated;
+             pointer-events: none; user-select: none; animation: iconFloat 3.2s ease-in-out infinite, iconGlow 3.2s ease-in-out infinite; }
+  body.icon #orbIcon { display: block; } body.icon #orbGl, body.icon #orbCss { display: none !important; }
+  body.fan #orbIcon { animation: iconFloat 3.2s ease-in-out infinite; filter: brightness(1.2) drop-shadow(0 0 4px var(--accent)) drop-shadow(0 0 16px var(--accent)); }
+  body.dot #orbIcon { animation: iconFloat 3.2s ease-in-out infinite, iconGlow 1.2s ease-in-out infinite; }
+  @keyframes iconFloat { 0%, 100% { transform: translateY(calc(2px * var(--s))); } 50% { transform: translateY(calc(-2px * var(--s))); } }
+  @keyframes iconGlow { 0%, 100% { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 80%, transparent)) drop-shadow(0 0 9px color-mix(in srgb, var(--accent) 45%, transparent)); }
+                        50% { filter: drop-shadow(0 0 4px var(--accent)) drop-shadow(0 0 16px color-mix(in srgb, var(--accent) 70%, transparent)); } }
   /* A card whose time ran out waits in the orb: a small dot (and the orb's glow pulses, in the shader). */
   #orbDot { position: absolute; width: calc(9px * var(--s)); height: calc(9px * var(--s)); border-radius: 50%; display: none;
             background: radial-gradient(circle at 40% 35%, #fff3d0, var(--amber) 60%); box-shadow: 0 0 8px var(--amber), 0 0 0 2px rgba(13, 12, 20, .85);
@@ -206,7 +216,7 @@
   <div class="timer" id="timerBar"><i id="timer"></i></div>
 </div>
 </div>
-<div id="orb" role="button"><canvas id="orbGl"></canvas><div id="orbCss"></div><div id="orbDot"></div></div>
+<div id="orb" role="button"><canvas id="orbGl"></canvas><div id="orbCss"></div><img id="orbIcon" src="orb-icon.svg" alt="" draggable="false"><div id="orbDot"></div></div>
 <div id="menu" role="menu">
   <button data-k="open" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg><span></span><i></i></button>
   <button data-k="log" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg><span></span><i></i></button>
@@ -791,9 +801,10 @@
     // (A card on its way: the state says so a moment before the card's content arrives; the orb stays till it morphs.)
     const show = !!O.on && ((!!O.orb && !isOpen) || ((b.contains('morphing') || (!!O.card && !isOpen)) && !!O.home));
     b.toggle('orbshow', show);
+    b.toggle('icon', !!O.icon);
     b.toggle('dot', show && !!O.dot && !isOpen);
     b.toggle('menu', !!O.menu && !isOpen);
-    Glass.run(show && !document.hidden);
+    Glass.run(show && !O.icon && !document.hidden);
     Glass.pulse(!!O.dot);
     if (O.on) {
       const m = $('menu');

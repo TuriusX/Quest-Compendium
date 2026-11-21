@@ -829,8 +829,8 @@ export default function App() {
 
   // Pop-up answers over the game: their size and corner (Settings).
   useEffect(() => {
-    (window as any).electronAPI?.setCardPrefs?.({ size: settings.popupSize || 'm', corner: settings.popupCorner || 'tr', speak: settings.popupReadAloud !== false, orb: settings.popupOrb !== false });
-  }, [settings.popupSize, settings.popupCorner, settings.popupReadAloud, settings.popupOrb]);
+    (window as any).electronAPI?.setCardPrefs?.({ size: settings.popupSize || 'm', corner: settings.popupCorner || 'tr', speak: settings.popupReadAloud !== false, orb: settings.popupOrb !== false, orbStyle: settings.popupOrbStyle === 'icon' ? 'icon' : 'orb' });
+  }, [settings.popupSize, settings.popupCorner, settings.popupReadAloud, settings.popupOrb, settings.popupOrbStyle]);
   // The pop-up's speaker button: its choice is the Settings switch's too.
   useEffect(() => {
     (window as any).electronAPI?.onCardSpeakPref?.((on: boolean) => setSettings((s) => ({ ...s, popupReadAloud: on })));

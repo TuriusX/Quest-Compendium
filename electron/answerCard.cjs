@@ -11,7 +11,7 @@
  *   update(payload)   the same answer with its picture, arrived later
  *   more()   the rest of the answer in place, then its next part (the quick menu's "More of this answer")
  *   pause() / resume()   while the quick menu is open, or the mouse is over the card
- *   setPrefs({ size, corner, speak, orb })   Settings: Small / Medium / Large, the corner, reading the summary aloud, the orb
+ *   setPrefs({ size, corner, speak, orb, orbStyle })   Settings: Small / Medium / Large, the corner, reading the summary aloud, the orb and its look
  *   speaking(on)   the summary is being read aloud: the card stays until it's done
  *
  * Summaries (owner, Nov 19 2026: quick information to get on with what led to the question): an answer with a summary
@@ -104,7 +104,7 @@ function createAnswerCard(opts) {
   let last = null; // the last answer the card showed: the orb's left click (and the quick menu's "Last card") brings it back
   let thinkingNow = null;
   let shownAt = 0;
-  let prefs = { size: 'm', corner: 'tr', speak: true, orb: true };
+  let prefs = { size: 'm', corner: 'tr', speak: true, orb: true, orbStyle: 'orb' };
   let orb = orbState.createOrbState();
   let speakingNow = false; // the summary is being read aloud (the timer waits)
   let height = 200;
@@ -227,6 +227,8 @@ function createAnswerCard(opts) {
   // home: where a card grows from and folds back to (the orb on and the panel away, even while hidden until next answer).
   const orbLook = () => ({
     ...orbState.look(orb), on: orb.on, home: orb.on && orb.away, geo: { ...orbState.orbGeometry(scale()), inset: MARGIN }, speak: prefs.speak,
+    // The orb's look (owner, Nov 21 2026): the glass orb, or the app's icon floating and glowing.
+    icon: prefs.orbStyle === 'icon',
     scale: scale(), right: prefs.corner === 'tr' || prefs.corner === 'br', bottom: prefs.corner === 'bl' || prefs.corner === 'br', strings: opts.strings(),
   });
 
@@ -690,6 +692,7 @@ function createAnswerCard(opts) {
         corner: ['tr', 'tl', 'br', 'bl'].includes(p && p.corner) ? p.corner : 'tr',
         speak: !(p && p.speak === false),
         orb: !(p && p.orb === false),
+        orbStyle: p && p.orbStyle === 'icon' ? 'icon' : 'orb',
       };
       if (prefs.orb !== orbWas) {
         if (!prefs.orb) stopWatch();

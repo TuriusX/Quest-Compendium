@@ -103,7 +103,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The pop-up while it thinks: the question was sent (and to which model).
   cardStage: (s) => ipcRenderer.send('card-stage', s && typeof s === 'object' ? { sent: !!s.sent, model: String(s.model || ''), place: String(s.place || '') } : {}),
   // Settings: the pop-up's size (s / m / l) and corner (tr / tl / br / bl).
-  setCardPrefs: (p) => ipcRenderer.send('set-card-prefs', p && typeof p === 'object' ? { size: String(p.size || 'm'), corner: String(p.corner || 'tr'), speak: p.speak !== false, orb: p.orb !== false } : {}),
+  setCardPrefs: (p) => ipcRenderer.send('set-card-prefs', p && typeof p === 'object' ? { size: String(p.size || 'm'), corner: String(p.corner || 'tr'), speak: p.speak !== false, orb: p.orb !== false, orbStyle: p.orbStyle === 'icon' ? 'icon' : 'orb' } : {}),
   // The pop-up's summary to read aloud ({ id, text }), or stop reading (null); the speaker button's choice; and back,
   // whether it's being read (the card waits for it).
   onCardSpeak: (callback) => { ipcRenderer.removeAllListeners('card-speak'); ipcRenderer.on('card-speak', (event, s) => callback(s && typeof s === 'object' ? { id: String(s.id || ''), text: String(s.text || '') } : null)); },
