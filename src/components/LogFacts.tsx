@@ -69,8 +69,9 @@ export function LogFacts(p: {
   useEffect(() => () => clearHover(), []);
   const isOpen = (id: string) => open[id] !== false;
   const toggle = (id: string) => setOpen((o) => { const n = { ...o, [id]: !isOpen(id) }; try { localStorage.setItem(OPEN_KEY, JSON.stringify(n)); } catch { /* remembered for this session only */ } return n; });
-  const missTag = (lost?: string) => (
-    <span className="ml-1.5 inline-block rounded border border-amber-400/40 bg-amber-400/10 px-1 text-[9.5px] font-bold uppercase tracking-wide text-amber-300 align-middle">{t('logfacts.missable')}</span>
+  // Missable: a yellow square bullet, not the word (owner, Nov 21 2026: the word took up space). Named for screen readers.
+  const missDot = (cls = '') => (
+    <span data-qc-missable="" title={t('logfacts.missable')} className={`flex-shrink-0 inline-block w-1.5 h-1.5 rounded-[1px] bg-amber-400 ${cls}`}><span className="sr-only">{t('logfacts.missable')}</span></span>
   );
   const head = (id: string, title: string, count: React.ReactNode, icon?: React.ReactNode) => (
     <button type="button" onClick={() => toggle(id)} aria-expanded={isOpen(id)} data-qc-log-section={id}
@@ -102,14 +103,15 @@ export function LogFacts(p: {
             return (
               <div key={g.id} data-qc-worth-item={g.id} onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, id: tid, text: g.name }); }}
                 className="group/row flex gap-2 items-start">
-                <span className="flex-shrink-0 mt-[7px] w-1.5 h-1.5 rounded-full" style={{ background: g.rarity ? rarityColor(g.rarity) : '#71717a' }} aria-hidden="true" />
+                {g.missable || g.lost
+                  ? missDot('mt-[7px]')
+                  : <span className="flex-shrink-0 mt-[7px] w-1.5 h-1.5 rounded-full" style={{ background: g.rarity ? rarityColor(g.rarity) : '#71717a' }} aria-hidden="true" />}
                 <div className="min-w-0 flex-1 text-[13px] leading-snug">
                   <button type="button" data-qc-item-name={g.id}
                     onMouseEnter={(e) => showSoon(g, e.currentTarget)} onMouseLeave={hideSoon}
                     onClick={(e) => { clearHover(); const r = anchorOf(e.currentTarget); const doc = e.currentTarget.ownerDocument; setCard((c) => (c?.kept && c.item.id === g.id ? null : { item: g, rect: r, kept: true, doc })); }}
                     className="font-semibold text-white text-left hover:underline decoration-white/30 underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-white rounded cursor-pointer">{g.name}</button>
                   {g.rarity && <span className="ml-1.5 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: rarityColor(g.rarity) }}>{g.rarity}</span>}
-                  {(g.missable || g.lost) && missTag(g.lost)}
                   {/* One line per item (owner, Nov 15 2026): what it does, where and how are in its card (hover or click the name). */}
                   {(g.lost || g.lockout) && <div className="text-[11.5px] text-amber-300/90">{g.lost ? t('logfacts.goneAt', { when: g.lost }) : g.lockout}</div>}
                 </div>
@@ -158,8 +160,8 @@ export function LogFacts(p: {
           {here.length === 0 && known && <div className="text-[12px] text-emerald-300/90">{t('logfacts.allHere')}</div>}
           {(all.ach ? here : here.slice(0, SHOW)).map((a) => (
             <div key={a.name} className="text-[13px] leading-snug">
+              {(a.missable || a.lost) && missDot('mr-1.5 align-middle')}
               <span className="font-semibold text-white">{a.name}</span>
-              {(a.missable || a.lost) && missTag()}
               {a.rarity && <span className="ml-1.5 text-[11px] text-emerald-300/80">{t('logfacts.players', { n: a.rarity })}</span>}
               {a.lost && <div className="text-[11.5px] text-amber-300/90">{t('logfacts.goneAt', { when: a.lost })}</div>}
               {!a.lost && a.if && <div className="text-[11.5px] text-amber-300/90">{t('logfacts.lostIf', { what: a.if.replace(/^(lost\s+)?if\s+/i, '') })}</div>}

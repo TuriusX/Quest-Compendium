@@ -57,7 +57,7 @@ import { pingNewSignup } from './signupPing';
 import { STEPS_RULES, extractSteps, cleanObjective, objectiveRules, extractTicked, extractLooksDone } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, fixVagueLabel, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
 import { disagreeingEntries } from './src/utils/guideAgree';
-import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
+import { CORRECTION_RULES, extractCorrections, matchGuideEntry, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { MISSING_RULES, extractMissing, saveMissingFacts, notOnPage } from './missingFacts';
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
@@ -2274,7 +2274,13 @@ percentages:
       const correctionIds = site ? [] : await saveCorrectionCandidates({
         page: guidePage, corrections, question: String(question || ''), uid: userId, isGuest, game: String(effectiveGame?.name || ''),
       });
-      const guideConflicts = guidePage && disagree.length ? { key: guidePage.key, slug: guidePage.slug, ids: disagree.map((d) => String(d.entry.id)).slice(0, 20) } : null;
+      // Walkthrough steps the answer corrected (owner, Nov 21 2026): their details leave this player's quest log at once
+      // ("w:<step id>"), and everyone's once the correction is filed (guidesApi.ts flaggedSteps).
+      const wrongSteps = guidePage && !site
+        ? correctionsParsed.corrections.map((c) => matchGuideEntry(guidePage, c.entry)).filter((e) => e?.kind === 'step').map((e) => `w:${e!.id}`)
+        : [];
+      const conflictIds = [...disagree.map((d) => String(d.entry.id)), ...wrongSteps].slice(0, 20);
+      const guideConflicts = guidePage && conflictIds.length ? { key: guidePage.key, slug: guidePage.slug, ids: conflictIds } : null;
       // A fight on screen that the area's guide page doesn't cover: a missing-fight candidate (the fight, its enemies
       // and the battle plan's steps; no conversation text). In the background: the answer doesn't wait for it.
       if (combatParsed.combat && guidePage && !site) {

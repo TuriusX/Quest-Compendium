@@ -28,7 +28,7 @@ export const PASS_FIELDS: Record<PassAction, string[]> = {
   info: ['info'],
   queries: ['items', 'secrets', 'seoTitle', 'seoDescription'],
   // Player corrections (corrections.ts): an entry rewritten, or a missing fight added.
-  correction: ['fights', 'items', 'secrets', 'sections'],
+  correction: ['fights', 'items', 'secrets', 'sections', 'walkthrough'],
   // Facts the sources contradicted (disputeSettle.ts): corrected or removed, and the walkthrough wording that stated them.
   disputes: ['fights', 'items', 'secrets', 'sections', 'enemies', 'shops', 'tips', 'walkthrough', 'overview'],
 };
@@ -122,8 +122,13 @@ export function changesOf(action: PassAction, live: Map<string, any>, staged: Ma
       }
       const old = new Set((lp.tips || []).map((t: any) => String(t)));
       (sp.tips || []).forEach((t: any, i: number) => { if (!old.has(String(t))) out.push({ page, slug, kind: 'tips', id: String(i), name: 'tip', text: cut(t, 400) }); });
+    }
+    // Changed walkthrough steps: disputes, and corrections since Nov 21 2026 (an answer found a step wrong).
+    if (action === 'disputes' || action === 'correction') {
       const steps = new Map((lp.walkthrough || []).map((x: any) => [String(x.id), x]));
       for (const x of sp.walkthrough || []) { const b: any = steps.get(String(x.id)); const body = (y: any) => cut([y.text, y.tip, y.warn].filter(Boolean).join(' / '), 600); if (b && body(b) !== body(x)) out.push({ page, slug, kind: 'step', id: String(x.id), name: cut(x.title || 'step', 60), text: body(x), before: body(b) }); }
+    }
+    if (action === 'disputes') {
       if (cut(lp.overview, 2000) !== cut(sp.overview, 2000)) out.push({ page, slug, kind: 'overview', id: 'overview', name: 'overview', text: cut(sp.overview, 600), before: cut(lp.overview, 600) });
     }
     if (GRADED.includes(action)) {

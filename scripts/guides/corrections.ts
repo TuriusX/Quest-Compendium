@@ -68,6 +68,8 @@ async function liveEntry(gameKey: string, slug: string, entryId: string, kind: s
   if (kind === 'fight') return { page, entry: { id: entryId } };
   if (kind === 'item') return { page, entry: (page.items || []).find((e: any) => e.id === entryId) };
   if (kind === 'secret') return { page, entry: (page.secrets || []).find((e: any) => e.id === entryId) };
+  // A walkthrough step an answer found wrong (owner, Nov 21 2026).
+  if (kind === 'step') return { page, entry: (page.walkthrough || []).find((e: any) => e.id === entryId) };
   for (const s of page.sections || []) {
     const e = (s.entries || []).find((x: any) => x.id === entryId);
     if (e) return { page, entry: e };
@@ -80,6 +82,8 @@ const describeEntry = (kind: string, e: any) =>
     ? `missing key fight${e?.name ? `: ${[e.name, e.enemies && `enemies ${e.enemies}`, e.tactics && `tactics ${e.tactics}`].filter(Boolean).join('; ')}` : ' (not on the page)'}`
     : kind === 'item'
     ? `item "${e.name}": where: ${e.where || '(not given)'}${e.notes ? `; notes: ${e.notes}` : ''}`
+    : kind === 'step'
+    ? `walkthrough step "${e.title}": ${e.text || ''}`
     : `${kind === 'secret' ? 'secret' : 'checklist line'}: ${e.text || e.name || ''}${e.where ? ` (where: ${e.where})` : ''}`;
 
 /** Step 1: the source check, with Google Search (line format: grounded replies can't be forced into JSON). */
@@ -100,7 +104,9 @@ async function sourceCheck(game: string, area: string, kind: string, entry: any,
       `WHERE: the entry's location, rewritten to be clear and specific (landmarks, directions, how to get there); empty if unclear`,
       `HOW: what it takes or how to do it (checks, keys, steps), if relevant; else empty`,
       `NOTES: anything else a player needs, if any; else empty. When a report says to leave it for now (it gets better later, as South Figaro's outdoor barrels and crates in Final Fantasy VI do in the World of Ruin) and sources confirm it: when to come back for it and what it becomes then, e.g. "Leave it unopened until the World of Ruin, when it holds an X-Potion instead"`,
-      ...(kind === 'item' ? [] : [`TEXT: the whole entry rewritten as one clear line that first names what it is (as the guide's entry does), then where and how; empty if unclear`]),
+      ...(kind === 'item' ? [] : kind === 'step'
+        ? [`TEXT: the step's instructions rewritten: what to do here, in play order, in two or three short sentences; leave out anything that only risks harm or doesn't help at that point; empty if unclear`]
+        : [`TEXT: the whole entry rewritten as one clear line that first names what it is (as the guide's entry does), then where and how; empty if unclear`]),
       `EVIDENCE: two to four sentences: each fact in WHERE / HOW / NOTES and which site showed it`,
       `Only use facts your searches showed: no character names, numbers, checks or contents that you didn't find. Leave a
       field empty rather than guess. Write in your own words; never copy sentences from websites.`,
@@ -197,6 +203,8 @@ async function reviewerCheck(game: string, area: string, kind: string, entry: an
       `return it tidied (same facts, clear wording, no new facts). Reply with JSON only:`,
       kind === 'item'
         ? `{"ok": true|false, "where": "...", "how": "...", "notes": "...", "reason": "<one sentence>"}`
+        : kind === 'step'
+        ? `{"ok": true|false, "text": "<the step's instructions, two or three short sentences>", "reason": "<one sentence>"}`
         : `{"ok": true|false, "text": "<the one-line entry, naming what it is first>", "reason": "<one sentence>"}`,
     ].join('\n') }] }],
     config: { responseMimeType: 'application/json', temperature: 0.1, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
@@ -253,6 +261,7 @@ async function applyToGuideLocked(gameKey: string, game: string, groups: { id: s
     const patch =
       g.entryKind === 'item' ? { items: fix(page.items) }
       : g.entryKind === 'secret' ? { secrets: fix(page.secrets) }
+      : g.entryKind === 'step' ? { walkthrough: fix(page.walkthrough) }
       : { sections: (page.sections || []).map((s: any) => ({ ...s, entries: fix(s.entries) })) };
     await ref.update({ ...patch, updatedAt: Date.now() });
   }

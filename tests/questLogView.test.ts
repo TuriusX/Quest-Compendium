@@ -274,7 +274,7 @@ test("a thin missable list: none in 5+ things, one in 10+, under 12% in 20+; a s
   assert.equal(missablesThin(page), false);
 });
 
-test("a question's objective: the guide step it is about (question, answer, else the screen) with its details and missables; nothing when none matches", () => {
+test("a question's objective: the guide step it is about (question, answer, else the screen) (matched, its details never shown); nothing when none matches", () => {
   const w = {
     slug: "stormveil-castle", done: new Set<string>(),
     steps: [
@@ -293,8 +293,9 @@ test("a question's objective: the guide step it is about (question, answer, else
   assert.equal(v.now?.text, "Talk to Gostoc");
   assert.deepEqual(v.next.map((s) => s.text), ["Through the Rampart Tower"], "the answer's steps are Next");
   assert.equal(v.now?.guide?.id, "w:stormveil-castle:w2", "the step the question is about");
-  assert.match(v.now?.guide?.detail || "", /Rampart Tower/);
-  assert.equal(v.watch?.text, "Gostoc leaves after Godrick.", "the step's own warning first");
+  // The answer is the better source (Nov 21 2026): neither the step's text nor its warning goes on the card.
+  assert.equal(v.now?.guide?.detail, undefined, "no step details under an answer");
+  assert.notEqual(v.watch?.text, "Gostoc leaves after Godrick.", "no step warning under an answer");
   assert.equal(v.here, undefined);
   // A question that matches no step: no guide step, the area's missables as before.
   const other = { ...ans, title: "Upgrade Your Flask", steps: [{ kind: "step", text: "Bring Golden Seeds to a grace" }, { kind: "step", text: "Rest" }] };

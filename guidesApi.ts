@@ -548,7 +548,11 @@ export function registerGuidesApi(app: Express): void {
       // The quest log's database sections (roadmap item 30, step 2; English, like the site's fact pages): only added to
       // the page, never in place of anything on it.
       const extra = !lang || lang === 'en' ? await cached(`areaFacts:${key}:${slug}`, () => areaFacts(key, slug)).catch(() => null) : null;
-      send(res, { ...localizePage(page, await translation(key, lang)), ...(extra || {}) });
+      const shown: any = localizePage(page, await translation(key, lang));
+      // Steps an answer found wrong: their details stay out of the app until the corrections check settles them.
+      const flagged = await flaggedSteps(key, slug);
+      if (flagged.size && Array.isArray(shown.walkthrough)) shown.walkthrough = withoutFlaggedSteps(shown.walkthrough, flagged);
+      send(res, { ...shown, ...(extra || {}) });
     } catch (e) {
       fail(res, e);
     }
@@ -776,6 +780,42 @@ export function withoutDisputed<T extends Record<string, any>>(a: T, d: Disputed
     ...(Array.isArray(a.sections) ? { sections: a.sections.map((x: any) => ({ ...x, entries: keep(x.entries) })) } : {}),
   };
 }
+/**
+ * Walkthrough steps an answer found wrong (owner, Nov 21 2026: "If the guide gives bad information it shouldn't be
+ * included in the app. It should be automatically flagged for correction"): a step with an open correction (filed by
+ * an answer, corrections.ts) keeps its title, the task, but loses its details (text, warning, tip) everywhere in the
+ * app and in answers' reference, until the nightly corrections check rewrites it from sources (applied) or finds the
+ * guide was right (dismissed). Read from correctionGroups for the guide, cached for two minutes.
+ */
+const flaggedCache = new Map<string, { at: number; bySlug: Map<string, Set<string>> }>();
+export async function flaggedSteps(key: string, slug: string): Promise<Set<string>> {
+  try {
+    const hit = flaggedCache.get(key);
+    if (hit && Date.now() - hit.at < 120_000) return hit.bySlug.get(slug) || new Set();
+    const snap = await getFirestore().collection('correctionGroups').where('gameKey', '==', key).get();
+    const bySlug = new Map<string, Set<string>>();
+    for (const d of snap.docs) {
+      const g: any = d.data();
+      if (g.entryKind !== 'step' || ['applied', 'dismissed'].includes(String(g.status))) continue;
+      const s = bySlug.get(String(g.area)) || new Set<string>();
+      s.add(String(g.entryId));
+      bySlug.set(String(g.area), s);
+    }
+    flaggedCache.set(key, { at: Date.now(), bySlug });
+    if (flaggedCache.size > 500) flaggedCache.clear();
+    return bySlug.get(slug) || new Set();
+  } catch {
+    return new Set();
+  }
+}
+/** Forget a guide's flagged steps (a step was just flagged: the next read has it). */
+export const forgetFlaggedSteps = (key: string) => { flaggedCache.delete(key); };
+/** The walkthrough with its flagged steps' details taken out (their titles stay). */
+export function withoutFlaggedSteps<T extends { id?: string }>(steps: T[] | undefined, flagged: Set<string>): T[] | undefined {
+  if (!steps || !flagged.size) return steps;
+  return steps.map((s) => (s && flagged.has(String(s.id)) ? ({ ...s, text: '', warn: undefined, tip: undefined, flagged: true } as T) : s));
+}
+
 /** The one line for the model: the walkthrough text may still name them. */
 export const recheckLine = (names: string[]) =>
   `Being re-checked (sources disagree with the guide): ${names.join('; ')}. Do not repeat what these notes or pages say about them; if asked, answer only from what you are sure of, or search.`;
@@ -843,8 +883,9 @@ export async function guidePageFor(game: string | undefined, place: string | und
     return await cached(`page:${key}:${area.slug}:${minScore}`, async () => {
       const doc = await getFirestore().collection('guides').doc(key).collection('areas').doc(area.slug).get();
       const raw: any = doc.exists ? doc.data() : null;
-      const off = await disputedOn(key, area.slug);
+      const [off, flagged] = await Promise.all([disputedOn(key, area.slug), flaggedSteps(key, area.slug)]);
       const a: any = raw ? withoutDisputed(raw, off) : null;
+      if (a && flagged.size && Array.isArray(a.walkthrough)) a.walkthrough = withoutFlaggedSteps(a.walkthrough, flagged);
       // Only a page that passed review (see pagePassed): anything else never reaches an answer.
       if (!a || !pagePassed(a, standing, minScore)) return null;
       return {

@@ -22,17 +22,19 @@ import crypto from 'crypto';
 import { isTestTraffic } from './testTraffic';
 import type { Express, Request, Response, NextFunction } from 'express';
 import { getFirestore } from 'firebase-admin/firestore';
-import { fightLine, type GuidePageForPlace } from './guidesApi';
+import { fightLine, forgetFlaggedSteps, type GuidePageForPlace } from './guidesApi';
 
 type Mw = (req: Request, res: Response, next: NextFunction) => any;
 
 /** What the model is asked to add when it corrects the guide notes (only when there are guide notes for the place). */
 export const CORRECTION_RULES = `
-- Guide corrections: if this answer corrects what the GUIDE NOTES above say about one of their entries (where it is,
-  how to get it, what it takes), because the player said it's wrong or because you checked and the notes are wrong or
-  too vague to follow, add one line at the very end (removed before the player sees it):
+- Guide corrections: if this answer corrects what the GUIDE NOTES above say about one of their entries or walkthrough
+  steps (where it is, how to get it, what it takes, what to do), because the player said it's wrong or because you
+  checked and the notes are wrong, too vague to follow, or advise something that only risks harm or makes no sense at
+  that point (a check with no reward, healing at full health), add one line at the very end (removed before the player
+  sees it):
 <qc-correction>{"entry": "<the entry's name, or the start of its line, exactly as in the guide notes>", "guide": "<what the notes say>", "claim": "<the corrected fact: short, specific and self-contained, e.g. where exactly and how to reach it>", "field": "where"}</qc-correction>
-  "field" is where, how or notes. Only for a real correction of the notes, never when you agree with them, and never
+  "field" is where, how or notes. For a walkthrough step, "entry" is the step's title. Only for a real correction of the notes, never when you agree with them, and never
   for something the notes don't mention. One line per corrected entry.`;
 
 export type CorrectionOut = { entry: string; guide: string; claim: string; field: 'where' | 'how' | 'notes' };
@@ -68,13 +70,13 @@ export function isPushback(question: string): boolean {
 const norm = (s: unknown) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
 /** A guide entry a candidate is about; 'fight' is a missing key fight (missingFights.ts), not on the page yet. */
-export type EntryRef = { id: string; kind: 'item' | 'secret' | 'section' | 'fight'; name: string; text: string };
+export type EntryRef = { id: string; kind: 'item' | 'secret' | 'section' | 'fight' | 'step'; name: string; text: string };
 
 /**
  * The guide entry a correction names: an item by its name, else a secret or checklist line whose text starts with (or
  * contains) what the model quoted. Null when nothing matches well enough.
  */
-export function matchGuideEntry(page: Pick<GuidePageForPlace, 'items' | 'secrets' | 'sections'>, entry: string): EntryRef | null {
+export function matchGuideEntry(page: Pick<GuidePageForPlace, 'items' | 'secrets' | 'sections'> & Partial<Pick<GuidePageForPlace, 'walkthrough'>>, entry: string): EntryRef | null {
   // The model often copies a whole line of the guide notes: drop its label ("Item:", "Secret:", a section title) and an
   // item's "(where)" part.
   let raw = String(entry || '').replace(/^\s*(item|secret|enemy|shop\/npc|tip)\s*:\s*/i, '');
@@ -87,6 +89,10 @@ export function matchGuideEntry(page: Pick<GuidePageForPlace, 'items' | 'secrets
     ...(page.secrets || []).map((x: any) => ({ id: String(x.id), kind: 'secret' as const, name: String(x.text || x.name || '').slice(0, 80), text: String(x.text || '') })),
     ...(page.sections || []).flatMap((s) => s.entries.map((x) => ({ id: String(x.id), kind: 'section' as const, name: String(x.text || '').slice(0, 80), text: String(x.text || '') }))),
   ];
+  // A walkthrough step, by its title (owner, Nov 21 2026: a wrong step is flagged like any entry).
+  const steps = (page.walkthrough || []).filter((s) => s && s.id && s.title);
+  const step = steps.find((s) => norm(String(s.title)) === e) || steps.find((s) => norm(String(s.title)).length >= 6 && (e.startsWith(norm(String(s.title))) || norm(String(s.title)).startsWith(e)));
+  if (step) return { id: String(step.id), kind: 'step', name: String(step.title), text: String(step.text || '') };
   const head = e.slice(0, 60);
   return lines.find((l) => norm(l.text).startsWith(head)) || (e.length >= 12 ? lines.find((l) => norm(l.text).includes(head)) : undefined) || null;
 }
@@ -241,6 +247,7 @@ export async function saveCorrectionCandidates(opts: {
     });
     if (id) ids.push(id);
   }
+  if (ids.length) forgetFlaggedSteps(page.key);
   if (ids.length) console.log(`[corrections] ${ids.length} candidate(s) for ${page.key}/${page.slug} (${pushback ? 'pushback' : 'contradiction'})`);
   return ids;
 }

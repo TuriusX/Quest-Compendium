@@ -154,6 +154,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   movePointers: (id, moves) => ipcRenderer.send('pointers-move', { id, moves }),
   settlePointers: (id, moves, removed) => ipcRenderer.send('pointers-settle', { id, moves, removed }),
   markerLog: (message) => ipcRenderer.send('pointers-log', message),
+  // A marker closed with its × on the game screen: { id, index } (index in the answer's list).
+  onPointersDismissed: (callback) => { ipcRenderer.removeAllListeners('pointers-dismissed'); ipcRenderer.on('pointers-dismissed', (event, d) => callback(d)); },
   onPointersState: (callback) => { ipcRenderer.removeAllListeners('pointers-state'); ipcRenderer.on('pointers-state', (event, s) => callback(s)); },
   onLocateRequest: (callback) => { ipcRenderer.removeAllListeners('locate-request'); ipcRenderer.on('locate-request', (event, r) => callback(r)); },
   setControllerConfig: (cfg) => ipcRenderer.send('set-controller-config', cfg),

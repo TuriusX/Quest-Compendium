@@ -9,9 +9,15 @@
      covers the item itself, so it stays visible (and the sticky tracker can keep checking it). */
   .m { position: absolute; left: 0; top: 0; will-change: transform; transition: opacity .2s steps(3); }
   .m.hidden { opacity: 0; }
+  /* The × that closes one marker (owner, Nov 21 2026). The window lets the mouse through everywhere else: only while
+     the pointer is over a × does it take clicks (qcBridge.mouse). */
+  .x { pointer-events: auto; cursor: pointer; width: 22px; height: 22px; margin-left: -2px; display: flex; align-items: center; justify-content: center;
+       align-self: flex-start; color: rgba(236, 230, 255, .55); font-size: 18px; font-weight: 600; line-height: 1; }
+  .x:hover { color: #fff; background: rgba(255, 255, 255, .14); }
+  .m.hidden .x, .m.gone .x, body.out .x { pointer-events: none; }
   .inner { position: relative; animation: pop .25s steps(3) both; }
   .tag { position: absolute; left: 0; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; white-space: nowrap;
-         background: rgba(16, 12, 28, .94); border: 2px solid var(--accent); padding: 3px 12px 3px 3px; color: #fff;
+         background: rgba(16, 12, 28, .94); border: 2px solid var(--accent); padding: 3px 3px 3px 3px; color: #fff;
          font-size: 16px; font-weight: 700; box-shadow: 0 6px 18px rgba(0, 0, 0, .6); }
   .num { width: 24px; height: 24px; background: var(--accent); color: #16101f; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; align-self: flex-start; }
   /* Name on top (with a small icon for what kind of thing it is), the one-line note underneath, dimmer and shorter. */
@@ -45,7 +51,7 @@
   body.combat .m:not(.kill) .num { display: none; }
   body.combat .m:not(.kill) .tag { padding-left: 8px; font-size: 14px; border-width: 1.5px; background: rgba(16, 12, 28, .86); }
   body.combat .m.kill { z-index: 5; }
-  body.combat .m.kill .tag { --accent: #ff5a4f; font-size: 18px; border-width: 3px; padding: 4px 14px 4px 4px;
+  body.combat .m.kill .tag { --accent: #ff5a4f; font-size: 18px; border-width: 3px; padding: 4px 4px 4px 4px;
                              box-shadow: 0 0 0 2px rgba(0, 0, 0, .55), 0 0 18px rgba(255, 90, 79, .75), 0 6px 18px rgba(0, 0, 0, .6); }
   body.combat .m.kill .num { width: 28px; height: 28px; font-size: 18px; color: #fff; align-self: center; }
   body.combat .m.kill.r1 .tag { font-size: 20px; }
@@ -179,7 +185,15 @@
         note.textContent = p.note;
         txt.append(note);
       }
-      tag.append(num, txt);
+      // × closes this marker: gone from the screen and switched off in the answer's list.
+      const x = document.createElement('span');
+      x.className = 'x';
+      x.textContent = '×';
+      x.title = 'Close';
+      x.addEventListener('mouseenter', () => window.qcBridge && window.qcBridge.mouse(true));
+      x.addEventListener('mouseleave', () => window.qcBridge && window.qcBridge.mouse(false));
+      x.addEventListener('click', (e) => { e.stopPropagation(); dismiss(i); });
+      tag.append(num, txt, x);
       inner.append(tag);
       el.append(inner);
       document.body.append(el);
@@ -522,6 +536,20 @@
     }, 200);
   }
 
+  /** The player closed marker i (its ×): hidden here, and the app switches it off in the answer's list. */
+  let listCount = 0; // how many markers came from the answer's list (later finds aren't in it)
+  function dismiss(i) {
+    const els = Array.from(document.querySelectorAll('.m'));
+    if (!els[i]) return;
+    hidden.add(i);
+    els[i].classList.add('hidden');
+    if (window.qcBridge) window.qcBridge.mouse(false);
+    const listIndex = listToEl ? listToEl.indexOf(i) : (i < listCount ? i : -1);
+    if (window.qcBridge && window.qcBridge.dismissed) window.qcBridge.dismissed(listIndex);
+    log(`marker ${i + 1} closed`);
+    if (els.every((el, k) => hidden.has(k) || removed.has(k))) finish();
+  }
+
   /** One item picked in the answer's list (its index there): its marker stands out. */
   window.qcHighlight = (index) => {
     const els = document.querySelectorAll('.m');
@@ -724,6 +752,7 @@
       setTimeout(() => window.qcSettle({}), 15000);
     }
     const els = buildMarkers(opts.points || []);
+    listCount = els.length;
     els.forEach((el, i) => hidden.has(i) && el.classList.add('hidden'));
     // Markers v2: in the answer's list but not found on the screen now: kept so the numbers match, never shown.
     (Array.isArray(opts.missing) ? opts.missing : []).forEach((i) => {

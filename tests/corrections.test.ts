@@ -74,4 +74,13 @@ test("reporters are weighted: app player and Discord user 1, anonymous website r
   assert.equal(reporterCount([{ uidHash: "old1" }, { uidHash: "old2", guest: true }]), 1);
 });
 
+test("a correction can name a walkthrough step by its title (Nov 21 2026: wrong steps are flagged too)", () => {
+  const page = { items: [], secrets: [], sections: [], walkthrough: [{ id: "w1", title: "Break Out in the Nursery", text: "Inspect the fragile pool." }, { id: "w2", title: "Extract Us in the Surgery Room", text: "" }] };
+  const m = matchGuideEntry(page as any, "Break Out in the Nursery");
+  assert.equal(m?.kind, "step");
+  assert.equal(m?.id, "w1");
+  assert.equal(matchGuideEntry(page as any, "Extract Us in the Surgery Room: lever the creature free")?.id, "w2");
+  assert.equal(matchGuideEntry(page as any, "Nursery"), null);
+});
+
 console.log(`\n${passed} tests passed`);

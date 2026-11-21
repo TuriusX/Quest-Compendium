@@ -2622,6 +2622,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       if (unplaced) updateMessageById(id, (m) => (m.markersUnplaced ? m : { ...m, markersUnplaced: true }));
       else if (active) updateMessageById(id, (m) => (m.markersUnplaced ? { ...m, markersUnplaced: false } : m));
     });
+    // A marker closed with its × over the game: switched off in the answer's list too (as unticking it there does).
+    api.onPointersDismissed?.(({ id, index }: { id: string; index: number }) => {
+      if (!Number.isInteger(index) || index < 0) return;
+      updateMessageById(id, (m) => ((m.donePoints || []).includes(index) ? m : { ...m, donePoints: [...(m.donePoints || []), index] }));
+    });
     api.onLocateRequest(async ({ id, image, occupied }: { id: string; image: string; occupied?: { x: number; y: number }[] }) => {
       const tab = tabsRef.current.find((t) => t.messages.some((m) => m.id === id));
       const msg = tab?.messages.find((m) => m.id === id);
@@ -3566,7 +3571,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       // corrections check (where the server sent them) decides, never for good on the answer's word alone.
       const gc = data.guideConflicts;
       const conflicts: { id: string; group?: string; at: number }[] = gc && typeof gc.slug === 'string' && Array.isArray(gc.ids)
-        ? gc.ids.filter((x: unknown) => typeof x === 'string').slice(0, 20).map((id: string) => ({ id: `g:${gc.slug}:${id}`, ...(typeof gc.key === 'string' ? { group: `${gc.key}__${gc.slug}__${id}` } : {}), at: Date.now() }))
+        ? gc.ids.filter((x: unknown) => typeof x === 'string').slice(0, 20).map((id: string) => ({ id: `g:${gc.slug}:${id}`, ...(typeof gc.key === 'string' ? { group: `${gc.key}__${gc.slug}__${id.replace(/^w:/, '')}` } : {}), at: Date.now() }))
         : [];
       setTabs(prev => {
         const nextTabs = prev.map(t => {

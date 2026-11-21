@@ -2001,7 +2001,8 @@ function showScreenPointers(points, accent, opts = {}) {
   const session = pointerSession;
   // Step 3: the answer's lines and rings, again on markers found again (the same answer).
   if (sessionId && lastPins && lastPins.id === sessionId) session.queueJs = [`window.qcSetPins && window.qcSetPins(${JSON.stringify(lastPins.pins)})`];
-  win.setIgnoreMouseEvents(true);
+  // Click-through, but mouse moves still reach the page, so a marker's × can take the mouse while it's under it.
+  win.setIgnoreMouseEvents(true, { forward: true });
   win.setAlwaysOnTop(true, 'screen-saver');
   // Either hidden from all screen capture, or visible in recordings (then the tracker ignores its own markers).
   // The app's own screenshots for the AI never include them either way: pointers are closed before capturing.
@@ -2072,6 +2073,19 @@ ipcMain.on('pointers-pins', (event, { id, pins } = {}) => {
   const js = `window.qcSetPins && window.qcSetPins(${JSON.stringify(clean)})`;
   if (pointerSession.ready && pointerWindow && !pointerWindow.isDestroyed()) pointerWindow.webContents.executeJavaScript(js).catch(() => {});
   else (pointerSession.queueJs = pointerSession.queueJs || []).push(js);
+});
+
+// A marker's × (owner, Nov 21 2026): the marker window takes clicks only while the mouse is over one, and a closed
+// marker is switched off in the answer's list too (index -1: a later find, not in the list).
+ipcMain.on('pointers-mouse', (event, on) => {
+  const win = pointerWindow;
+  if (!win || win.isDestroyed() || event.sender !== win.webContents) return;
+  win.setIgnoreMouseEvents(!on, { forward: true });
+});
+ipcMain.on('pointers-dismissed', (event, index) => {
+  const session = pointerSession;
+  if (!session || !session.id || event.sender !== (session.win && !session.win.isDestroyed() && session.win.webContents)) return;
+  if (Number.isInteger(index) && index >= 0 && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('pointers-dismissed', { id: session.id, index });
 });
 
 // The player switched individual markers on or off in the answer's list.

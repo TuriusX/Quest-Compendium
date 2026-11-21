@@ -9,4 +9,8 @@ contextBridge.exposeInMainWorld('qcBridge', {
   unplaced: () => ipcRenderer.send('pointers-unplaced'),
   // Markers v2: the view changed and the screen is still now: find the markers again.
   refind: () => ipcRenderer.send('pointers-refind'),
+  // A marker's ×: the mouse is over it (the window takes clicks only then), and the player closed that marker
+  // (its index in the answer's list; -1 for one found later, which isn't in the list).
+  mouse: (on) => ipcRenderer.send('pointers-mouse', !!on),
+  dismissed: (index) => ipcRenderer.send('pointers-dismissed', Number.isInteger(index) ? index : -1),
 });

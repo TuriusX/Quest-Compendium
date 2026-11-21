@@ -363,12 +363,6 @@ export function QuestLog(p: QuestLogProps) {
                   <span className="truncate">{t('tracker.seenOnScreen', { what: n.seen })}</span>
                 </div>
               )}
-              {n.guide && (
-                <details data-qc-log-guide={n.guide.id} className="mt-2 text-[11.5px] text-zinc-500 min-w-0">
-                  <summary className="cursor-pointer truncate outline-none focus-visible:ring-2 focus-visible:ring-white rounded">{t('tracker.fromGuideStep', { step: n.guide.title })}</summary>
-                  {n.guide.detail && <p className="mt-1 text-zinc-400 leading-snug">{n.guide.detail}</p>}
-                </details>
-              )}
               {/* The goal these steps are for (no "n of total": nothing is ticked any more, owner Nov 20 2026). */}
               {n.total > 0 && n.goal && n.goal !== n.text && (
                 <div className="mt-2 text-[11.5px] font-semibold text-zinc-500 truncate">{n.goal}</div>
