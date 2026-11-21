@@ -16,6 +16,10 @@ player can get straight back to what they were doing.
 Write what the player should do now:
 - The action, where (or with what), and the one thing to watch for if there is one. One or two short sentences that
   sound natural spoken aloud, at most 40 words.
+- If the answer names something worth getting right now that is easy to miss or gone for good after this moment (an
+  item, a reward, a companion, and how to get it, e.g. "have Shadowheart cast Command: Drop on Zhalk to take the
+  Everburn Blade"), keep it: one more short sentence, even if that goes past 40 words (at most 55 in all). Never
+  drop it to keep the summary short.
 - Only what the answer says: never add facts, names, numbers or places it doesn't have. When the answer isn't sure,
   the summary isn't either. When the answer is a hint, the summary is that hint, never the solution.
 - No background, lore, lists, markdown, links, citations or tags. The same language as the answer.
@@ -30,14 +34,14 @@ export const CARD_SUMMARY_IMMERSIVE = `
 
 This player uses immersive mode: the answer is told by a narrator who lives in the game's world. Write the summary in
 that same narrator's voice (their manner and a turn of phrase or two, as they'd say it at the player's side), while the
-action, places, names and numbers stay exactly as plain and correct as the rules above require. Still at most 40 words.`;
+action, places, names and numbers stay exactly as plain and correct as the rules above require. Still within the same word limits.`;
 
 /** The summarizer's input: the question and the finished answer. */
 export function summaryInput(question: string, answer: string, hint = false): string {
   return `${hint ? 'This answer is a hint: the player asked not to be told the solution.\n\n' : ''}Question:\n${String(question || '').slice(0, 500)}\n\nAnswer:\n${String(answer || '').slice(0, 12000)}`;
 }
 
-/** Plain spoken text: no markdown, links, citations or our tags; at most 300 characters, cut at a sentence. */
+/** Plain spoken text: no markdown, links, citations or our tags; at most 380 characters (room for a must-get item), cut at a sentence. */
 export function cleanSummary(v: unknown): string {
   let s = String(v ?? '')
     .replace(/<[^>]+>/g, ' ')
@@ -49,8 +53,8 @@ export function cleanSummary(v: unknown): string {
     .replace(/\s+/g, ' ')
     .replace(/\s+([.,!?;:])/g, '$1')
     .trim();
-  if (s.length > 300) {
-    const cut = s.slice(0, 300);
+  if (s.length > 380) {
+    const cut = s.slice(0, 380);
     const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
     s = end > 120 ? cut.slice(0, end + 1) : cut.replace(/\s+\S*$/, '') + '…';
   }

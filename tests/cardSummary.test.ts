@@ -8,9 +8,9 @@ assert.equal(cleanSummary("Take the key from the chest, then go through the **no
 assert.equal(cleanSummary("Summary: Use [fire](https://x.y) on it [cite: 2]."), "Use fire on it.");
 assert.equal(cleanSummary("  "), "");
 
-// Long: cut at a sentence, at most 300 characters.
+// Long: cut at a sentence, at most 380 characters (Nov 21 2026: room for a must-get item).
 const long = cleanSummary("Do this first. ".repeat(40));
-assert.ok(long.length <= 300 && long.endsWith("."));
+assert.ok(long.length <= 380 && long.endsWith("."));
 
 // A hint says so; the answer is the input.
 assert.ok(summaryInput("Where?", "North.", true).startsWith("This answer is a hint"));

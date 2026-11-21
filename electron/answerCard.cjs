@@ -119,6 +119,9 @@ function createAnswerCard(opts) {
   let hits = [];
   let overId = '';
   let mouseIn = null;
+  // A video made full screen in the card (owner, Nov 21 2026: "I cannot minimize it... I had to exit the app"): the
+  // window takes the mouse and the keys until it leaves full screen (Esc, or the player's own button).
+  let fullScreen = false;
   let watch = null;
   let menuSeenAt = 0;
   let dwellFrom = 0; // since when the mouse has rested on the orb (the fan opens after DWELL_MS)
@@ -173,9 +176,41 @@ function createAnswerCard(opts) {
       if (fanOn) w.webContents.send('orb-fan', true);
     });
     win.loadFile(path.join(__dirname, 'answerCard.html'));
+    // Full screen: the window is click-through and never focused, so neither Esc nor the player's exit button would
+    // reach it. While full screen it takes the mouse and the keys; leaving gives them back to the game.
+    let watchWas = false;
+    win.webContents.on('enter-html-full-screen', () => {
+      if (win !== w || fullScreen) return;
+      watchWas = !!watch;
+      stopWatch();
+      fullScreen = true;
+      // The whole screen (a transparent window doesn't go full screen by itself: the player would fill the card only).
+      w.setBounds(opts.display().bounds);
+      w.setFocusable(true);
+      w.setIgnoreMouseEvents(false);
+      w.focus();
+    });
+    win.webContents.on('leave-html-full-screen', () => {
+      if (win !== w || !fullScreen) return;
+      fullScreen = false;
+      // Back to the card's place (again a moment later: Chromium resizes the page as it leaves full screen).
+      place();
+      setTimeout(() => { if (win === w) place(); }, 150);
+      w.setFocusable(false);
+      w.blur();
+      applyMouseMode();
+      if (watchWas) startWatch();
+    });
+    // Electron leaves Esc to the page: it ends full screen here, as a browser does.
+    win.webContents.on('before-input-event', (event, input) => {
+      if (!fullScreen || input.type !== 'keyDown' || input.key !== 'Escape') return;
+      event.preventDefault();
+      w.webContents.executeJavaScript('document.fullscreenElement && document.exitFullscreen()', true).catch(() => {});
+    });
     win.on('closed', () => {
       if (win !== w) return; // dropped on purpose (drop() has cleaned up)
       win = null;
+      fullScreen = false;
       ready = false;
       stopWatch();
     });
@@ -189,6 +224,7 @@ function createAnswerCard(opts) {
    */
   function drop() {
     if (!alive()) return;
+    fullScreen = false;
     const w = win;
     win = null;
     ready = false;
@@ -217,7 +253,7 @@ function createAnswerCard(opts) {
     return { x: Math.round(right ? x + W - w - MARGIN : x + MARGIN), y: Math.round(bottom ? y + H - h - MARGIN : y + MARGIN), width: w, height: h };
   }
   function place() {
-    if (!alive()) return;
+    if (!alive() || fullScreen) return; // a full-screen video keeps the whole screen until it leaves
     const next = bounds();
     const b = win.getBounds();
     if (b.x !== next.x || b.y !== next.y || b.width !== next.width || b.height !== next.height) win.setBounds(next);
@@ -234,18 +270,18 @@ function createAnswerCard(opts) {
 
   /** Click-through, without forwarding: the watch lets the mouse in over the page's parts. */
   function applyMouseMode() {
-    if (!alive()) return;
+    if (!alive() || fullScreen) return;
     mouseIn = null;
     win.setIgnoreMouseEvents(true);
   }
   function setMouseIn(on) {
-    if (!alive() || mouseIn === on) return;
+    if (!alive() || fullScreen || mouseIn === on) return;
     mouseIn = on;
     if (on) win.setIgnoreMouseEvents(false);
     else win.setIgnoreMouseEvents(true);
   }
   function startWatch() {
-    if (watch) return;
+    if (watch || fullScreen) return;
     watch = setInterval(() => {
       if (!alive() || !win.isVisible()) return void over('');
       const p = require('electron').screen.getCursorScreenPoint();
@@ -526,7 +562,7 @@ function createAnswerCard(opts) {
         steps, model: a.model === 'Pro' || a.model === 'Fast' ? a.model : '', place: String(a.place || ''), combat: !!a.combat,
         picture: pictureOf(a.picture),
         // What to do now, shown instead of the answer's start and read aloud (Nov 19 2026).
-        summary: String(a.summary || '').slice(0, 320),
+        summary: String(a.summary || '').slice(0, 400),
         // Immersive mode (Nov 20 2026): the card's storybook look.
         immersive: !!a.immersive,
         at: Date.now(),
@@ -553,7 +589,7 @@ function createAnswerCard(opts) {
       const text = String(a.text || '').slice(0, 6000);
       if (text && text !== current.text) {
         current.text = text;
-        current.summary = String(a.summary || '').slice(0, 320);
+        current.summary = String(a.summary || '').slice(0, 400);
         current.steps = (Array.isArray(a.steps) ? a.steps : []).slice(0, 8).map((s) => ({ kind: s.kind === 'warning' ? 'warning' : 'step', label: String(s.label || '').slice(0, 160), where: String(s.where || '').slice(0, 160) }));
         moreState = { more: false, part: 0, parts: 0 };
         last = current;

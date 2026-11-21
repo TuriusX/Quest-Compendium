@@ -2245,7 +2245,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       clearTimeout(timer);
       if (res.ok) {
         const data = await res.json();
-        if (typeof data?.summary === 'string') summary = data.summary.trim().slice(0, 320);
+        if (typeof data?.summary === 'string') summary = data.summary.trim().slice(0, 400);
       }
     } catch {
       /* no summary: the card shows the answer */

@@ -85,6 +85,8 @@ export function QuestLog(p: QuestLogProps) {
   const v = p.view;
   const [showPins, setShowPins] = useState(false);
   const [showEarlier, setShowEarlier] = useState(false);
+  // Watch out's full text (it shows two lines until clicked).
+  const [watchOpen, setWatchOpen] = useState(false);
   // Earlier's sessions: the newest open, older ones folded until tapped (by key).
   const [openSession, setOpenSession] = useState<string | null>(null);
   const locale = useLocale();
@@ -450,18 +452,17 @@ export function QuestLog(p: QuestLogProps) {
         )}
 
         {v.watch && (
-          <div>
-            {/* Watch out: what's about to be lost, without a "(from the guide)" label (owner, Nov 15 2026). */}
-            {label(t('tracker.logWatch'), undefined, true)}
-            <div className="flex gap-2.5 rounded-md border border-amber-300/35 bg-amber-300/[0.09] px-3 py-2.5">
-              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-300" />
-              <div className="text-[13px] leading-snug text-[#f3e6c8] min-w-0">
-                <b className="text-amber-300 font-bold">{v.watch.text}</b>
-                {v.watch.why && v.watch.why !== v.watch.text ? <> · {v.watch.why}</> : null}
-              </div>
-              <button type="button" onClick={() => p.onHideWatch(v.watch!.id)} title={t('tracker.logHideWatch')} aria-label={t('tracker.logHideWatch')}
-                className="ml-auto self-start text-amber-300/70 hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white rounded"><X className="w-3.5 h-3.5" /></button>
-            </div>
+          // Watch out: what's about to be lost. One quiet line (owner, Nov 21 2026: the yellow bold box "takes up too much
+          // space... ugly and distracting"): a small amber sign, plain text, two lines at most (a click shows the rest).
+          <div data-qc-log-watch="" className="group/watch flex gap-2 items-start">
+            <AlertTriangle className="w-3.5 h-3.5 mt-[3px] flex-shrink-0 text-amber-300/90" aria-label={t('tracker.logWatch')} />
+            <button type="button" onClick={() => setWatchOpen((o) => !o)} title={watchOpen ? undefined : t('tracker.expandHint')}
+              className={`min-w-0 flex-1 text-left text-[12.5px] leading-snug text-zinc-300 outline-none focus-visible:ring-2 focus-visible:ring-white rounded ${watchOpen ? '' : 'line-clamp-2'}`}>
+              {v.watch.text}
+              {v.watch.why && v.watch.why !== v.watch.text ? <span className="text-zinc-400"> · {v.watch.why}</span> : null}
+            </button>
+            <button type="button" onClick={() => p.onHideWatch(v.watch!.id)} title={t('tracker.logHideWatch')} aria-label={t('tracker.logHideWatch')}
+              className="self-start mt-[2px] text-zinc-500 hover:text-white opacity-0 group-hover/watch:opacity-100 focus-visible:opacity-100 outline-none focus-visible:ring-2 focus-visible:ring-white rounded"><X className="w-3.5 h-3.5" /></button>
           </div>
         )}
 
