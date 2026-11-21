@@ -396,6 +396,9 @@ async function slideIn(opts = {}) {
   if (!mainWindow) return;
   // The quest log (tracker.cjs) is independent: opening the panel never hides it; it steps off the panel instead.
   let slid = false;
+  // How long opening takes, step by step (owner, Nov 20 2026: it felt slow): in the log as [open].
+  const openT0 = Date.now();
+  const openAt = () => `+${Date.now() - openT0}ms`;
   if (!isAppVisible) {
     if (opts.snapshot) {
       openSnapshot = { image: opts.snapshot, session: overlaySession + 1, at: Date.now() };
@@ -412,10 +415,15 @@ async function slideIn(opts = {}) {
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
       spine.hide();
       if (answerCard) answerCard.setAway(false);
+      console.log(`[open] showing ${openAt()}`);
+      // The slide first, then the snapshot: taking it keeps this process busy, and the slide's steps stalled behind it
+      // (measured Nov 20 2026: still moving at 0.73 s instead of 0.15 s).
       if (currentDockPosition !== 'undocked') {
         const c0 = getDockCoords(false);
-        animateWindow(c0.x, c0.y, 150);
+        // (an animation cut short by another never resolves: at most 400 ms here)
+        await Promise.race([animateWindow(c0.x, c0.y, 150), new Promise((r) => setTimeout(r, 400))]);
         slid = true;
+        console.log(`[open] in place ${openAt()}`);
       }
       try {
         const image = await Promise.race([
@@ -430,6 +438,7 @@ async function slideIn(opts = {}) {
         // (seen in recordings and the player's own screenshots again)
         try { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setContentProtection(false); } catch {}
       }
+      console.log(`[open] snapshot ${openSnapshot ? 'taken' : 'none'} ${openAt()}`);
       if (!mainWindow || mainWindow.isDestroyed()) return;
       // Sent away again while the snapshot was being taken (slideOut cleared isAppVisible): it stays away.
       if (!isAppVisible) { overlaySession++; return; }
@@ -448,7 +457,9 @@ async function slideIn(opts = {}) {
   mainWindow.focus();
   // Take focus from the game (Windows won't let a background app do this on its own when the overlay was
   // opened with a controller), so the game stops reacting to controller input while the overlay is open.
+  const takeT0 = Date.now();
   const previous = focusHelper.take(mainWindow) || focusedBefore;
+  console.log(`[open] focused ${openAt()} (taking focus: ${Date.now() - takeT0}ms)`);
   if (previous) focusBeforeOverlay = previous;
   console.log(`[focus] open: recorded ${focusHelper.describe ? focusHelper.describe(focusBeforeOverlay) : focusBeforeOverlay} (before the panel: ${focusHelper.describe ? focusHelper.describe(focusedBefore) : focusedBefore})`);
   // macOS equivalent
