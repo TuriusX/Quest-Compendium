@@ -78,13 +78,61 @@ async function grounded(prompt: string, label: string, fromNotes = false): Promi
   return null;
 }
 
+/**
+ * The model that WRITES a page (walkthrough, choices, short version), apart from the checks (owner, Nov 22 2026 test):
+ * GUIDE_WRITER_MODEL (e.g. gemini-4-hydrogen) and GUIDE_WRITER_THINKING (low | medium); unset, MODEL as before.
+ */
+const WRITER_LABELS = new Set(['walkthrough', 'choices', 'short version']);
+const writerModel = () => (/^gemini-[a-z0-9.-]+$/i.test(process.env.GUIDE_WRITER_MODEL || '') ? String(process.env.GUIDE_WRITER_MODEL) : '');
+const writerThinking = () => (process.env.GUIDE_WRITER_THINKING === 'medium' ? ThinkingLevel.MEDIUM : ThinkingLevel.LOW);
+
+/**
+ * The smoothing model (owner, Nov 22 2026: on for every evidence-method page after two blind rounds; ~$0.02 a page,
+ * no fact added, checked again). GUIDE_SMOOTH_MODEL=off turns it off; another gemini-* name replaces Hydrogen.
+ */
+const smoothModel = () => {
+  const v = String(process.env.GUIDE_SMOOTH_MODEL ?? '').trim();
+  if (v === 'off') return '';
+  return /^gemini-[a-z0-9.-]+$/i.test(v) ? v : 'gemini-4-hydrogen';
+};
+
+/**
+ * The checked steps reworded for flow (the text only; titles, tips, warnings and entries stay as they are). The same
+ * number of steps back, or null. Nothing may be added: the result is checked against the evidence again by the caller.
+ */
+export async function smoothSteps(game: string, area: string, steps: GuideStep[], model: string): Promise<GuideStep[] | null> {
+  const prompt = [
+    `Below are the checked walkthrough steps for the area "${area}" in the video game "${game}". Every fact in them has been checked against sources. Rewrite them so they read like a good guide.`,
+    'STRICT: use ONLY the facts already in these steps. Add no name, place, item, enemy, number, reward, direction or outcome that is not already written here, and drop none. You may reword, join or split sentences, reorder sentences within a step, and add plain transitions ("From there,", "Once that\'s done,").',
+    'Keep the same steps in the same order: one rewritten step for each step given, with a short title. Each step 2-5 sentences, addressed to the player ("you").',
+    '',
+    GUIDE_VOICE,
+    '',
+    'Reply with JSON only: {"steps": [{"title": "...", "text": "..."}]}',
+    '',
+    'STEPS:',
+    JSON.stringify(steps.map((s, i) => ({ n: i + 1, title: s.title, text: s.text }))),
+  ].join('\n');
+  const res: any = await gemini().models.generateContent({
+    model, contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: { temperature: 0.3, maxOutputTokens: 12000, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: process.env.GUIDE_SMOOTH_THINKING === 'low' ? ThinkingLevel.LOW : ThinkingLevel.MEDIUM } },
+  });
+  let j: any = null;
+  try { const t = String(res?.text || ''); j = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch { return null; }
+  const out = Array.isArray(j?.steps) ? j.steps : [];
+  if (out.length !== steps.length) return null;
+  // Titles stay as checked (the quest log matches objectives on them): only the text is reworded.
+  return steps.map((s, i) => ({ ...s, text: String(out[i]?.text || '').trim() || s.text }));
+}
+
 /** A call without searches (writing and checking from a source pack). */
 async function plain(prompt: string, label: string): Promise<string> {
+  const w = WRITER_LABELS.has(label) ? writerModel() : '';
   const res: any = await gemini().models.generateContent({
-    model: MODEL,
+    model: w || MODEL,
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     // 16k: on OpenAI the reasoning counts against the limit, and long pages lost their short version (written last).
-    config: { temperature: 0.3, maxOutputTokens: 16000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    config: { temperature: 0.3, maxOutputTokens: 16000, thinkingConfig: { thinkingLevel: w ? writerThinking() : ThinkingLevel.LOW } },
   });
   console.log(`  [${label}] no searches`);
   return String(res?.text || '');
@@ -122,6 +170,19 @@ function researchPrompt(game: string, p: any, neighbours: string[]) {
   ].join('\n');
 }
 
+/**
+ * How the walkthrough reads (owner, Nov 22 2026 test; GUIDE_VOICE=1): like a good guide written by someone who has
+ * played it, one route through the area, instead of a list of facts. The facts rules above it are unchanged.
+ */
+export const GUIDE_VOICE = [
+  'HOW IT READS: like the best walkthroughs, written by a player who knows this area well and is walking a friend through it.',
+  '- One route: each step picks up where the last one left off ("From the gate, ...", "Once the lift is down, ...", "Back at the camp, ..."), so the steps read as one path through the area in the order you play it, not a list of separate facts.',
+  '- Each step\'s text leads with what to do and where, then what you\'ll find or face; add why it matters only when it changes what the player does (a better reward, an easier fight, a choice that locks something).',
+  '- Plain, confident and specific: the names a player sees on screen, landmarks, directions. No filler ("this area is full of secrets"), no hype ("epic", "massive", "incredible"), no hedging unless the evidence itself is unsure.',
+  '- Tips and warnings only when they truly help at that moment; most steps need neither. Mention a missable once, calmly, in the step where it matters, never as alarm and never repeated.',
+  '- No spoilers past this area: describe what happens here without revealing later twists.',
+].join('\n');
+
 function walkPrompt(game: string, p: any, entries: { line: string }[], fights: GuideFight[], neighbours: string[], notes: string) {
   return [
     `You are writing the walkthrough of one area of a guide for the video game "${game}", as an experienced player would: the area "${p.name}"${p.story ? ` (${p.story})` : ''}.`,
@@ -135,6 +196,7 @@ function walkPrompt(game: string, p: any, entries: { line: string }[], fights: G
     'Write the area in the order a player experiences it, as 5 to 10 steps, one line each:',
     STEP_FORMAT,
     'Place every entry below in the step where a player meets it (by its id), and every key fight too. Say exactly where things are, using names a player sees.',
+    ...(process.env.GUIDE_VOICE === '1' ? ['', GUIDE_VOICE] : []),
     '',
     'Then any important items or secrets here that the list lacks (at most 8), one line each:',
     NEW_FORMAT,
@@ -775,6 +837,19 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   });
   applied.removed.push(...second.removed.map((r) => ({ ...r, why: `review: ${r.why || ''}`.trim() })));
   if (second.removed.length) console.log(`  review removed ${second.removed.length} more claim(s)`);
+  // 6. Smoothing (GUIDE_SMOOTH_MODEL, owner Nov 22 2026 test): the checked steps reworded to read as one route, no fact
+  // added, then checked again; a step with any sentence the evidence doesn't support keeps its checked wording.
+  const sm = smoothModel();
+  if (sm && proto.walkthrough.length && !cutOff()) {
+    const checked: GuideStep[] = proto.walkthrough;
+    const smoothed = await smoothSteps(game, p.name, checked, sm).catch((e: any) => { console.log(`  smoothing: skipped (${String(e?.message || e).slice(0, 80)})`); return null; });
+    if (smoothed) {
+      const vs = await claimCheck(game, p.name, claimSlots({ steps: smoothed, entries: [], choices: [], advice: [], services: [], fights: [] }), ev);
+      const bad = new Set(vs.filter((v) => v.kind === 'sentence' && v.verdict !== 'supported' && v.verdict !== 'general').map((v) => Number(v.label.slice(1)) - 1));
+      proto.walkthrough = smoothed.map((s, i) => (bad.has(i) ? checked[i] : s));
+      console.log(`  smoothing: ${smoothed.length - bad.size} of ${smoothed.length} steps reworded (${bad.size} kept as checked)`);
+    }
+  }
   const spent = scope ? { searches: scope.searches - before.searches, dollars: scope.dollars - before.dollars } : { searches: ledger.searches - before.searches, dollars: ledgerDollars() - before.dollars };
   const out = tidyProto({
     ...proto, mode: 'evidence', sources: ev.sites.slice(0, 12), cost: spent, model: sup ? `${sup.by} (draft and evidence), ${MODEL} (checks)` : MODEL, at: Date.now(),
@@ -805,9 +880,11 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
     console.log(`  services and people: skipped (${String(e?.message || e).slice(0, 80)})`);
   }
   const docId = `${key}__${slug}__evidence`;
-  await db().collection('guidePrototypes').doc(docId).set(JSON.parse(JSON.stringify(out)));
+  // A comparison test (QC_EVAL_TAG): nothing saved in Firestore, the page only in a tagged local file.
+  const evalTag = String(process.env.QC_EVAL_TAG || '').replace(/[^a-z0-9-]/gi, '');
+  if (!evalTag) await db().collection('guidePrototypes').doc(docId).set(JSON.parse(JSON.stringify(out)));
   fs.mkdirSync('scratchpad/flagship', { recursive: true });
-  fs.writeFileSync(`scratchpad/flagship/${docId}.json`, JSON.stringify(out, null, 1));
+  fs.writeFileSync(`scratchpad/flagship/${docId}${evalTag ? `.${evalTag}` : ''}.json`, JSON.stringify(out, null, 1));
   console.log(`  cost: ${spent.searches} searches, $${spent.dollars.toFixed(3)}`);
   return { proto: out, review, removed: applied.removed, rules: rules.removed, spent };
 }
