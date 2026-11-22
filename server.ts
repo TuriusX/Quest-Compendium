@@ -1758,7 +1758,9 @@ percentages:
       // Fast in the app (Flash, for players with full access; Flash-Lite for the rest is unchanged) gets the same rules, search from the first
       // try and guide lines as Pro, thinking low (owner, Nov 5 2026: 12 test questions, 5 wrong claims against 6, median 14 s against 27).
       // The app's faster answers on Gemini 4 Hydrogen (owner, Nov 22 2026: config/chatRouting geminiFast), for every player.
-      const appFastModel = !site ? routingCfg.geminiFast || '' : '';
+      // The website too when its OpenAI switch is off (owner, Nov 22 2026: one voice everywhere, config/chatRouting openaiSite false).
+      const appFastModel = !site || !routingCfg.openaiSite ? routingCfg.geminiFast || '' : '';
+      const siteHydrogen = !!site && !!appFastModel;
       if (appFastModel && !usePro) targetModel = appFastModel;
       const fastApp = !site && !usePro && (targetModel === MAIN_MODEL || (!!appFastModel && targetModel === appFastModel));
       // Pro in the app: the guide lines that match the question, from anywhere in the guide (the area's page alone often has
@@ -1819,7 +1821,7 @@ percentages:
       }
       if ((usePro || fastApp) && !site) systemInstruction = withProRules(systemInstruction, searchOk, !!imageBase64, usePro, promptSplit ? perQ : undefined);
       // The voice (owner, Nov 22 2026; searchPolicy.ts VOICE_RULE): the same every question, so it stays in the cached part.
-      if ((usePro || fastApp) && !site && routingCfg.voiceRule) systemInstruction += `\n\n${VOICE_RULE}`;
+      if ((((usePro || fastApp) && !site) || siteHydrogen) && routingCfg.voiceRule) systemInstruction += `\n\n${VOICE_RULE}`;
       // Last in the prompt, as in the Nov 21 2026 tests (WHAT_NEXT_IN_FULL in searchPolicy.ts), and only for "what next"
       // questions: other questions did a little better without it.
       if (!site && asksWhatNext(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null))) systemInstruction += perQ(`\n\n${WHAT_NEXT_IN_FULL}`);

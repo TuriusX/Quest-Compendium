@@ -290,7 +290,7 @@ async function answer(ai: GoogleGenAI, ctx: Awaited<ReturnType<typeof context>>,
 // ---- the app's own answers for the website (server.ts chatHandler; owner, Nov 3 2026) ----
 export type SiteReference = { withPage: string; withoutPage: string; refs: Record<string, any> };
 export type SiteAnswerOpts = { req: Request; question: string; game: string; guideKey?: string; place?: string; language: string; premium: boolean; maySearch: boolean; situation?: string; reference?: SiteReference; imageBase64?: string; stream?: (e: { raw?: string; reset?: boolean; searching?: boolean }) => void };
-export type SiteAnswerOut = { text: string; guideRefs?: any[]; searched?: boolean; site?: { answered: boolean; dollars: number; searches: number; missing: { name: string; fact: string }[]; page: { key: string; slug: string; name: string } | null } };
+export type SiteAnswerOut = { text: string; guideRefs?: any[]; searched?: boolean; modelUsed?: string; site?: { answered: boolean; dollars: number; searches: number; missing: { name: string; fact: string }[]; page: { key: string; slug: string; name: string } | null } };
 const APP_LANGUAGE: Record<string, string> = { en: 'English', es: 'Spanish', pt: 'Brazilian Portuguese', de: 'German', fr: 'French', ru: 'Russian', ja: 'Japanese', ko: 'Korean', zh: 'Simplified Chinese' };
 export const appLanguage = (lang: string) => APP_LANGUAGE[lang] || 'English';
 
@@ -390,7 +390,7 @@ async function fullAnswer(run: (o: SiteAnswerOpts) => Promise<SiteAnswerOut>, re
     covered: links.length > 0, sources: links.slice(0, 3), searches: r.site.searches, aboutPage,
     // Answered only from other pages: a suggestion for this page, as before.
     elsewhere: here && links.length && links.every((l) => !l.href.includes(here)) ? links.slice(0, 3) : [],
-    missing: r.site.missing, missingPage: r.site.page?.slug || '', dollars: r.site.dollars,
+    missing: r.site.missing, missingPage: r.site.page?.slug || '', dollars: r.site.dollars, model: r.modelUsed || '',
   };
 }
 
@@ -596,7 +596,7 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
         // The screenshot itself is never saved or logged: only that there was one.
         ...(home ? { surface: 'home' } : {}), ...(image ? { hadImage: true } : {}), ...(noGuide ? { noGuide: true, game: noGuide } : {}),
         key: key || `noguide:${gameKeyOf(noGuide)}`, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, signedIn: !!acct, ...(acct?.premium ? { premium: true } : {}), sources: out.a.sources.map((s) => s.href), searches: out.a.searches,
-        dollars, model: MODEL(), at: Date.now(), day: dayOf(), ...(isLocalServer() ? { test: true } : {}),
+        dollars, model: out.a.model || MODEL(), at: Date.now(), day: dayOf(), ...(isLocalServer() ? { test: true } : {}),
       });
       // What a question teaches needs a guide page to teach, and a question about a screenshot makes no sense without it.
       if (key && !image) void learn(doc.id, { key, slug: slug || out.ctx.placeSlug, kind: slug || !out.ctx.placeSlug ? kind : 'area', lang, q, answer: out.a.text, covered: out.a.covered, searched: out.a.searches, aboutPage: out.a.aboutPage, elsewhere: out.a.elsewhere, missing: out.a.missing, missingPage: out.a.missingPage }, c).catch((e) => console.warn('[site-ask] learn', e?.message));
