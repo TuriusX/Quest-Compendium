@@ -38,6 +38,7 @@ import { routing, takePlayerPro, PRO_CHAT_MODEL, openaiModelFor, openaiSiteModel
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL, QUICK_LOOKUP_RULE, splitPerQuestion } from './searchPolicy';
 import { asksWhatNext } from './src/utils/whatNext';
 import { isSimpleLookup } from './src/utils/simpleLookup';
+import { readSaveState, writeSaveState } from './saveStateStore';
 import { recordPlayerCost, registerPlayerCosts, costCap, monthSpent } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
 import { currentOffer, currentTrial, trialEligible, trialStep } from './offers';
@@ -1590,6 +1591,15 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       }
       // Playthrough memory (src/utils/playthrough.ts): the choices the player made, the key items they have and their
       // own notes, as the app sends them (at most 1,200 characters; the player sees and edits all of it).
+      // The Steam Deck sends no save record: a signed-in Deck player's stored one is read here (saveStateStore.ts), and
+      // updated after the answer (below), so the Deck's answers know the party and the story like the desktop's.
+      const deckSaveGame = !site && !isGuest && /QuestCompendiumDeck/i.test(String(req.headers['user-agent'] || '')) && effectiveGame?.name ? String(effectiveGame.name) : '';
+      const deckAskedAt = Date.now();
+      let deckOldState: any = null;
+      if (deckSaveGame && !(req.body.playthrough && typeof req.body.playthrough === 'object' && req.body.playthrough.state)) {
+        deckOldState = await readSaveState(userId, deckSaveGame);
+        if (deckOldState) req.body.playthrough = { ...(req.body.playthrough && typeof req.body.playthrough === 'object' ? req.body.playthrough : {}), state: deckOldState };
+      }
       const play = req.body.playthrough && typeof req.body.playthrough === 'object' ? req.body.playthrough : null;
       if (play) {
         const list = (v: unknown) => (Array.isArray(v) ? v : []).map((x) => String(x ?? '').replace(/\s+/g, ' ').trim().slice(0, 160)).filter(Boolean).slice(0, 40);
@@ -2353,6 +2363,15 @@ percentages:
       if (chargedBucket && !site) recordPlayerCost({ uid: userId, premium: isPremium, guest: isGuest, dollars: costScope.dollars, searches: costScope.searches });
       // The same cost by day, for the weekly player report (free, Premium or guest).
       if (chargedBucket && !site) recordDailyCost(userId, isGuest ? 'guest' : isPremium ? 'premium' : 'free', costScope.dollars, (req as any).user?.email, { searched: searchesUsed > 0, shot: !!imageBase64 });
+      // A Deck answer updates the stored save record in the background, as the desktop does after each answer (about $0.001).
+      if (deckSaveGame && chargedBucket && String(responseText || '').trim().length >= 40) {
+        void computeSaveState({
+          game: deckSaveGame, question, answer: responseText, old: deckOldState, place: place?.name || '', story: story?.text || '',
+          done: doneList, guideKey, guideDone: req.body.guideDone, appId: gameAppId,
+        })
+          .then((st) => (st ? writeSaveState(userId, deckSaveGame, st, deckAskedAt) : false))
+          .catch((e: any) => console.log('[deck save] not updated:', String(e?.message || e).slice(0, 120)));
+      }
       // By game, for the Monday summary: how many answers needed a search.
       if (chargedBucket && !site) recordAnswerGame(effectiveGame?.name, userId, (req as any).user?.email, { question: true, searched: searchesUsed > 0 });
       // One line per answer, for the search rate per question (searchPolicy.ts).
@@ -2555,38 +2574,45 @@ percentages:
       recent.push(now);
       saveStateCalls.set(who, recent);
       if (saveStateCalls.size > 5000) saveStateCalls.clear();
-      const strs = (v: unknown, n = 30) => (Array.isArray(v) ? v : []).map((x) => String(x ?? '')).filter(Boolean).slice(0, n);
-      const place = typeof b.place === 'string' ? b.place.slice(0, 100) : '';
-      // The guide's steps for this place (ticked ones marked), for what's still open close by.
-      let steps: { title: string; done: boolean }[] = [];
-      if (place) {
-        const pg: any = await guidePageFor(game, place, Number(b.appId) || 0, typeof b.guideKey === 'string' ? b.guideKey : null).catch(() => null);
-        const ticked = new Set(strs(b.guideDone, 300));
-        steps = (Array.isArray(pg?.walkthrough) ? pg.walkthrough : []).filter((s: any) => s && s.title && !s.flagged)
-          .slice(0, 12).map((s: any) => ({ title: String(s.title), done: ticked.has(`walk:${s.id}`) || ticked.has(String(s.id)) }));
-      }
-      const input = saveStateInput({
-        game, question: String(b.question || ''), answer, old: b.old && typeof b.old === 'object' ? b.old : null, place,
-        story: typeof b.story === 'string' ? b.story : '', done: strs(b.done), choices: strs(b.choices), found: strs(b.found), steps,
-      });
-      const shot = typeof b.imageBase64 === 'string' ? b.imageBase64.match(/^data:(image\/[a-z+]+);base64,(.+)$/) : null;
-      const ai = getHelperClient();
-      const r: any = await withTimeout(
-        ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: [{ role: 'user', parts: [...(shot ? [{ inlineData: { mimeType: shot[1], data: shot[2] } }] : []), { text: input }] }],
-          config: { systemInstruction: SAVE_STATE_PROMPT, temperature: 0.1, maxOutputTokens: 700, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
-        }),
-        15000,
-        'save state',
-      );
-      logUsage('save-state', 'gemini-3.8-flash', r);
-      return res.json({ state: parseSaveState(r?.text || '') });
+      return res.json({ state: await computeSaveState({ ...b, game, answer }) });
     } catch (err: any) {
       console.log('save state failed:', err?.message);
       return res.json({ state: null });
     }
   });
+
+  /** The save record after one answer (SAVE_STATE_PROMPT on Flash, about $0.001): for /api/save-state and Deck answers. */
+  async function computeSaveState(b: any): Promise<ReturnType<typeof parseSaveState>> {
+    const game = String(b.game || '').slice(0, 160);
+    const answer = String(b.answer || '');
+    const strs = (v: unknown, n = 30) => (Array.isArray(v) ? v : []).map((x) => String(x ?? '')).filter(Boolean).slice(0, n);
+    const place = typeof b.place === 'string' ? b.place.slice(0, 100) : '';
+    // The guide's steps for this place (ticked ones marked), for what's still open close by.
+    let steps: { title: string; done: boolean }[] = [];
+    if (place) {
+      const pg: any = await guidePageFor(game, place, Number(b.appId) || 0, typeof b.guideKey === 'string' ? b.guideKey : null).catch(() => null);
+      const ticked = new Set(strs(b.guideDone, 300));
+      steps = (Array.isArray(pg?.walkthrough) ? pg.walkthrough : []).filter((s: any) => s && s.title && !s.flagged)
+        .slice(0, 12).map((s: any) => ({ title: String(s.title), done: ticked.has(`walk:${s.id}`) || ticked.has(String(s.id)) }));
+    }
+    const input = saveStateInput({
+      game, question: String(b.question || ''), answer, old: b.old && typeof b.old === 'object' ? b.old : null, place,
+      story: typeof b.story === 'string' ? b.story : '', done: strs(b.done), choices: strs(b.choices), found: strs(b.found), steps,
+    });
+    const shot = typeof b.imageBase64 === 'string' ? b.imageBase64.match(/^data:(image\/[a-z+]+);base64,(.+)$/) : null;
+    const ai = getHelperClient();
+    const r: any = await withTimeout(
+      ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: [{ role: 'user', parts: [...(shot ? [{ inlineData: { mimeType: shot[1], data: shot[2] } }] : []), { text: input }] }],
+        config: { systemInstruction: SAVE_STATE_PROMPT, temperature: 0.1, maxOutputTokens: 700, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+      }),
+      15000,
+      'save state',
+    );
+    logUsage('save-state', 'gemini-3.8-flash', r);
+    return parseSaveState(r?.text || '');
+  }
 
   /**
    * Earlier's session note (owner, Nov 20 2026; src/utils/earlierSessions.ts): one sentence of what the player did in a
