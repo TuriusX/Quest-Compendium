@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { NextQuestionsLine } from './QuestionsPill';
-import { ModelToggle } from './ModelToggle';
+import { AnswerMeter } from './AnswerMeter';
 import { createPortal } from 'react-dom';
 import { balancesOf, modelKind, readAnswerModel, saveAnswerModel, startingModel, type AnswerModel } from '../utils/answerModel';
 import ReactMarkdown from 'react-markdown';
@@ -453,15 +453,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const bal = balancesOf(quota);
   // The answer whose ⋯ menu (save, copy, report) is open.
   const [actionMenu, setActionMenu] = useState<string | null>(null);
-  const [answerModel, setAnswerModel] = useState<AnswerModel>(() => startingModel(readAnswerModel(), bal));
+  // One ask button (owner, Nov 21 2026): no Pro / Fast choice any more. Best answers (the Pro allowance) first, quick
+  // ones (Fast) when they run out; an old saved "fast" choice is ignored.
+  const [answerModel, setAnswerModel] = useState<AnswerModel>(() => startingModel('pro', bal));
   const [modelNote, setModelNote] = useState('');
   // Pro / Fast is drawn in the top bar's slot (owner, Nov 6 2026); where there's no top bar, by the send button as before.
   const [modelSlot, setModelSlot] = useState<HTMLElement | null>(null);
   useEffect(() => { setModelSlot(document.getElementById('qc-model-slot')); }, []);
   const preferredModel: 'pro' | 'flash' = answerModel === 'fast' ? 'flash' : 'pro';
+  // Only running out of best answers is worth a word; getting them back (a new day) shows in the meter.
   const noteSwitch = (to: AnswerModel) => {
-    setModelNote(t(to === 'fast' ? 'model.switchedToFast' : 'model.switchedToPro'));
-    window.setTimeout(() => setModelNote(''), 5000);
+    if (to !== 'fast') return;
+    // Stays until the next question is sent, so it isn't missed while reading the answer.
+    setModelNote(t('ask.lastBest'));
   };
   const chooseModel = (m: AnswerModel) => {
     setAnswerModel(m);
@@ -471,8 +475,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // The chosen model ran out (the counts came back from an answer or the status): switch to the other, and say so.
   useEffect(() => {
     if (!quota) return;
-    // The player's own choice has questions again (a new day): back to it.
-    const saved = readAnswerModel();
+    // Best answers are back (a new day): back to them.
+    const saved: AnswerModel = 'pro';
     if (answerModel !== saved && (saved === 'pro' ? bal.pro : bal.fast) > 0) {
       setAnswerModel(saved);
       return;
@@ -487,15 +491,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // The server answered with the other model (the chosen one was used up), or a controller's R3 switched.
   useEffect(() => {
     const switched = (e: Event) => {
+      if ((e as CustomEvent).detail?.monthCap) { setModelNote(t('ask.monthCap')); return; }
       const to = (e as CustomEvent).detail?.to === 'fast' ? 'fast' : 'pro';
       setAnswerModel(to);
       noteSwitch(to);
     };
-    const toggle = () => setAnswerModel((m) => {
-      const next: AnswerModel = m === 'pro' ? 'fast' : 'pro';
-      saveAnswerModel(next);
-      return next;
-    });
+    // A controller's R3 used to switch Pro / Fast: there is nothing to switch now.
+    const toggle = () => {};
     window.addEventListener('qc-answer-model-switched', switched);
     window.addEventListener('qc-toggle-answer-model', toggle);
     return () => {
@@ -992,6 +994,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setAttachedImage(null);
     attachedImageRef.current = null;
 
+    setModelNote('');
     await onSendMessage(finalQuestion, finalImage || undefined, undefined, preferredModel, quick);
     playChimeSound(soundEnabled);
   };
@@ -1595,7 +1598,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
             {/* Pro / Fast: in the top bar, or here when there's none */}
             {(() => {
-              const toggle = <ModelToggle value={answerModel} onChange={chooseModel} pro={bal.pro} fast={bal.fast} disabled={isLoading} balances={bal} showCounts={Number(quota?.resetAt) > 0} quota={quota} />;
+              const toggle = <AnswerMeter balances={bal} quota={quota} />;
               return modelSlot ? createPortal(toggle, modelSlot) : toggle;
             })()}
 
@@ -1857,7 +1860,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     // One small grey line: "Fast · 10:38" (there's only one speaker; Spot it says so)
                     <span className="text-zinc-500 font-sans">
                       {[
-                        msg.kind === 'spot' || msg.kind === 'help' ? msg.modelUsed : modelKind(msg.modelUsed) ? t(`model.${modelKind(msg.modelUsed)}`) : '',
+                        msg.kind === 'spot' || msg.kind === 'help' ? msg.modelUsed : modelKind(msg.modelUsed) ? t(modelKind(msg.modelUsed) === 'pro' ? 'ask.best' : 'ask.quick') : '',
                         new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                       ].filter(Boolean).join(' · ')}
                     </span>

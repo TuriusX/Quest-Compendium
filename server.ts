@@ -35,9 +35,10 @@ import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor, baseGameKey } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL, openaiModelFor, openaiSiteModel } from './chatRouting';
-import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL } from './searchPolicy';
+import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL, QUICK_LOOKUP_RULE } from './searchPolicy';
 import { asksWhatNext } from './src/utils/whatNext';
-import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
+import { isSimpleLookup } from './src/utils/simpleLookup';
+import { recordPlayerCost, registerPlayerCosts, costCap, monthSpent } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
 import { currentOffer, currentTrial, trialEligible, trialStep } from './offers';
 import { questionType } from './src/utils/questionType';
@@ -1332,7 +1333,13 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       // Gemini Pro. The player picks one next to the send button; when it's used up today, the other one answers.
       let targetModel = site || hasFullAccess(isPremium) ? MAIN_MODEL : FREE_MODEL;
       const skipPrimary = true;
-      const wanted = wantedBucket(req.body);
+      // A simple single-fact lookup (owner, Nov 21 2026): it counts as a quick answer, never a best one, and is answered by
+      // the best model thinking minimally with one search ("sol lite": in the blind test 7.4 s and facts 4.96 of 5, vs
+      // 11 s and 4.89 for a best answer). With no quick answers left it falls back to a best one as before.
+      const lookup = !site && isSimpleLookup(String(question || ''), !!imageBase64);
+      // The monthly safety cap (playerCosts.ts costCap): a Premium player past it this month gets quick answers until the 1st.
+      const overCap = !site && isPremium && !isGuest ? (await monthSpent(userId)) >= (await costCap()).premiumMonthly : false;
+      const wanted = lookup || overCap ? 'flash' : wantedBucket(req.body);
       // Model comparisons (scripts/evals/model-compare): with QC_EVAL_CAPTURE set on a LOCAL server (never on Cloud Run)
       // and a test account, the Pro answer request is built as a signed-in player's (search allowed) and written to that
       // file instead of being sent: no model is called, no quota or shared Pro budget is used.
@@ -1374,7 +1381,10 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
 
       // Persona & Mode System Instructions
       const currentDate = new Date().toLocaleString();
-      let systemInstruction = `[SYSTEM TIME: The current date and time is ${currentDate}. Always use this as the real present date.]\n\n`;
+      // The time goes at the END of the prompt (owner, Nov 21 2026: cost). It used to be the first line, so no two prompts
+      // started alike and OpenAI's discount on a repeated prompt start (cached input, about 20x cheaper) never applied.
+      const systemTimeLine = `[SYSTEM TIME: The current date and time is ${currentDate}. Always use this as the real present date.]`;
+      let systemInstruction = '';
       // Check if a game is detected either by local process detection, tab selection, or inquiry text
       const effectiveGame = activeGame || null;
       const isGameContextAvailable = !!effectiveGame;
@@ -1493,7 +1503,7 @@ No screenshot or image is attached to this question. Never describe, refer to or
       systemInstruction += `
 
 [USER LANGUAGE PREFERENCE]
-You must respond entirely in ${language}. Do not use English unless the user's language preference is English or they specifically request it.`;
+You must respond entirely in ${language}. Do not use English unless the user's language preference is English or they specifically request it. One exception: if the player's latest question is clearly written in a different language, answer in the language of their question (owner, Nov 21 2026: a Portuguese question in an app set to English got an English answer).`;
 
       let situationalContext = '';
       if (activeGame && isGameRunningLocally) {
@@ -1727,7 +1737,7 @@ percentages:
       // Pro (players' share of today's Pro requests isn't used up, chatRouting.ts); otherwise Flash.
       let qtype = questionType(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null));
       const routingCfg = await routing();
-      const usePro = evalCapture ? true : picked.bucket === 'pro' && (await takePlayerPro(routingCfg));
+      const usePro = evalCapture ? true : !overCap && picked.bucket === 'pro' && (await takePlayerPro(routingCfg));
       // Fast in the app (Flash, for players with full access; Flash-Lite for the rest is unchanged) gets the same rules, search from the first
       // try and guide lines as Pro, thinking low (owner, Nov 5 2026: 12 test questions, 5 wrong claims against 6, median 14 s against 27).
       const fastApp = !site && !usePro && targetModel === MAIN_MODEL;
@@ -1791,6 +1801,7 @@ percentages:
       // Last in the prompt, as in the Nov 21 2026 tests (WHAT_NEXT_IN_FULL in searchPolicy.ts), and only for "what next"
       // questions: other questions did a little better without it.
       if (!site && asksWhatNext(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null))) systemInstruction += `\n\n${WHAT_NEXT_IN_FULL}`;
+      systemInstruction += `\n\n${systemTimeLine}`;
       // Ask mode: the first try has no search, and may ask for it.
       const firstSystem = searchMode === 'ask' && searchOk ? `${systemInstruction}\n\n${ASK_RULES}` : systemInstruction;
       let searchAsked = false;
@@ -1996,7 +2007,10 @@ percentages:
           if (usePro) modelUsed = 'Gemini 3.1 Pro';
           // OpenAI answers (openaiAnswer.ts; config/chatRouting openaiPro / openaiFast, for a share of players): the app's
           // Pro and Fast, not the website (yet). Gemini answers instead when OpenAI is down or overloaded.
-          const oaModel = site ? (openaiReady() && !evalCapture ? openaiSiteModel(routingCfg, usePro) : '') : (usePro || fastApp) && openaiReady() && !evalCapture ? openaiModelFor(routingCfg, { pro: usePro, uid: String(userId || ''), owner: isOwnerEmail(typeof (req as any).user?.email === 'string' ? String((req as any).user.email).trim().toLowerCase() : null) }) : '';
+          const oaOwner = isOwnerEmail(typeof (req as any).user?.email === 'string' ? String((req as any).user.email).trim().toLowerCase() : null);
+          // A lookup answered as a quick answer: the best model, thinking minimally ("sol lite"), not the quick model.
+          const liteLookup = lookup && !usePro && !overCap && openaiReady() && !evalCapture ? openaiModelFor(routingCfg, { pro: true, uid: String(userId || ''), owner: oaOwner }) : '';
+          const oaModel = liteLookup || (site ? (openaiReady() && !evalCapture ? openaiSiteModel(routingCfg, usePro) : '') : (usePro || fastApp) && openaiReady() && !evalCapture ? openaiModelFor(routingCfg, { pro: usePro, uid: String(userId || ''), owner: oaOwner }) : '');
           const heard: { text?: string; seconds?: number } = {};
           const modelOf = (r: any) => (typeof r?.model === 'string' && /^gpt-/i.test(r.model) ? r.model : answerModel);
           const geminiCall = (sys: string, withSearch: boolean): Promise<any> => ai.models.generateContent(answerParams(sys, withSearch));
@@ -2024,7 +2038,9 @@ percentages:
               const mine = site?.stream ? ++attempt : 0;
               if (mine > 1) site!.stream!({ reset: true });
               const onText = site?.stream ? (all: string) => { if (mine === attempt) site.stream!({ raw: all }); } : undefined;
-              return openaiAnswer({ model: oaModel, system: sys, contents: contentsPayload, withSearch, effort: 'low', maxOutputTokens: 16000, heard, onText })
+              return openaiAnswer(liteLookup
+                ? { model: oaModel, system: `${sys}\n\n${QUICK_LOOKUP_RULE}`, contents: contentsPayload, withSearch, effort: 'minimal', maxToolCalls: 1, maxOutputTokens: 2500, heard, onText }
+                : { model: oaModel, system: sys, contents: contentsPayload, withSearch, effort: 'low', maxOutputTokens: 16000, heard, onText })
                 .then((r) => { logTranscribe('chat-voice', OPENAI_TRANSCRIBE_MODEL, r.audioSeconds); return r; })
                 .catch((e: any) => {
                   if (!openaiUnavailable(e)) throw e;
@@ -2441,6 +2457,7 @@ percentages:
         // Which model's question the answer used ("pro" or "fast"), and whether that wasn't the one the player picked
         // (it was used up: the app switches its toggle and says so).
         ...(chargedBucket ? { answeredWith: chargedBucket === 'pro' ? 'pro' : 'fast', ...(chargedBucket !== wanted ? { switched: true } : {}) } : {}),
+        ...(overCap ? { monthCap: true } : {}),
         searched: searchesUsed > 0,
         ...(site ? { site: { answered: !!chargedBucket, dollars: costScope.dollars + abandoned * SITE_ABANDONED_DOLLARS, searches: searchesUsed, missing: siteMissing, page: guidePage ? { key: guidePage.key, slug: guidePage.slug, name: guidePage.name } : null } } : {}),
         // A guest who just used their last question today: the apps show the sign-in card under this answer.

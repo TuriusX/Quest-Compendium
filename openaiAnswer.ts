@@ -92,7 +92,9 @@ export type OpenAIAnswerOpts = {
   contents: GContent[];
   withSearch: boolean;
   /** 'low' as in the test (Pro thinks low on Gemini too). */
-  effort?: 'low' | 'medium' | 'high';
+  effort?: 'minimal' | 'low' | 'medium' | 'high';
+  /** At most this many web searches (a simple lookup: 1). */
+  maxToolCalls?: number;
   maxOutputTokens?: number;
   signal?: AbortSignal;
   /** The request's voice transcript, kept between its calls (a retry doesn't transcribe again). */
@@ -112,7 +114,7 @@ export async function openaiAnswer(o: OpenAIAnswerOpts): Promise<any> {
     // Nothing kept at OpenAI past its abuse checks (no 30-day stored response): each answer stands alone.
     store: false,
     reasoning: { effort: o.effort || 'low' },
-    ...(o.withSearch ? { tools: [{ type: 'web_search' }] } : {}),
+    ...(o.withSearch ? { tools: [{ type: 'web_search' }], ...(o.maxToolCalls ? { max_tool_calls: o.maxToolCalls } : {}) } : {}),
   };
   let r: any;
   if (o.onText) {

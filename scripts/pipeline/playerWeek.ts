@@ -12,6 +12,7 @@
  */
 import crypto from 'crypto';
 import { db } from '../guides/common';
+import { costCap } from '../../playerCosts';
 
 export const ALERT_MONTH_DOLLARS = 20;
 export const ALERT_LIMIT_SHARE = 0.1;
@@ -102,6 +103,13 @@ export async function playerWeekLines(today = Date.now()): Promise<string[]> {
     w.freePlayers && w.hitShare > ALERT_LIMIT_SHARE ? `${Math.round(w.hitShare * 100)}% of free players ran out of questions (over ${Math.round(ALERT_LIMIT_SHARE * 100)}%)` : '',
   ].filter(Boolean);
   if (alerts.length) lines.unshift(`⚠️ Time to revisit the free limits: ${alerts.join('; ')}.`);
+  // Premium players past the alert line this month (playerCosts.ts costCap; owner, Nov 21 2026).
+  const cap = await costCap();
+  const heavy = (await db().collection('playerCosts').doc(month).collection('players').get()).docs
+    .map((d) => ({ hash: hashOf(d.id), premium: (d.data() as any).premium === true, dollars: Number((d.data() as any).dollars) || 0 }))
+    .filter((p) => p.premium && p.dollars >= cap.alertAt && !ownerHashes.includes(p.hash))
+    .sort((a, b) => b.dollars - a.dollars);
+  if (heavy.length) lines.unshift(`💳 Premium players past $${cap.alertAt} of AI cost this month: ${heavy.map((p) => `${p.hash.slice(0, 6)} ${money(p.dollars)}`).join(', ')} (quick answers only from $${cap.premiumMonthly}).`);
   lines.push(`(Left out: your own and test accounts (ADMIN_EMAILS on the server and config/players), ${w.owners} anonymous id(s) so far; and test traffic: test guest ids and local servers.)`);
   return lines;
 }

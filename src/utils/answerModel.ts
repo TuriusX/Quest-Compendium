@@ -27,7 +27,7 @@ export function saveAnswerModel(m: AnswerModel): void {
  */
 export function modelKind(modelUsed?: string): AnswerModel | '' {
   const m = String(modelUsed || '');
-  if (/offline|limit reached|session expired|unavailable|^eval$/i.test(m)) return '';
+  if (/offline|limit reached|session expired|unavailable|^eval$|^app$/i.test(m)) return '';
   if (/flash|lite|fast/i.test(m)) return 'fast';
   if (/\bpro\b/i.test(m)) return 'pro';
   return '';

@@ -3464,6 +3464,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       if (data.switched && data.answeredWith) {
         window.dispatchEvent(new CustomEvent('qc-answer-model-switched', { detail: { to: data.answeredWith } }));
       }
+      // Premium past the month's safety cap: quick answers until the 1st, and the app says so once.
+      if (data.monthCap === true) window.dispatchEvent(new CustomEvent('qc-answer-model-switched', { detail: { to: 'fast', monthCap: true } }));
 
       let finalAiText = data.text;
       if (!finalAiText || finalAiText.trim().length === 0) {
@@ -3787,7 +3789,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           role: 'assistant',
           text: translate('chat.newSession'),
           timestamp: Date.now(),
-          modelUsed: 'Gemini 3.8 Flash'
+          // The app's own welcome line, not an answer: no "Best / Quick answer" tag (modelKind gives '' for it).
+          modelUsed: 'app'
         }
       ],
       notes: '',

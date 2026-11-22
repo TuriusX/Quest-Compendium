@@ -231,6 +231,10 @@ Treat their save and story point as fact: anything that has to be done to reach 
  */
 export const WHAT_NEXT_IN_FULL = WHAT_NEXT_IN_FULL_V3;
 
+/** Added to a simple lookup's prompt (simpleLookup.ts), as in the Nov 21 2026 blind test. */
+export const QUICK_LOOKUP_RULE = `[QUICK LOOKUP]
+This is a simple factual lookup. Give the answer first, in one or two sentences, then at most two short details that help (where exactly, a requirement, a cost). No route, no next steps, no headings. If you are not sure of the exact fact, search once rather than guess.`;
+
 /** Fast in the app uses the same rules on Flash since Nov 5 2026 (`pro` false: the same words, without saying the player chose Pro). */
 /** The prompt with Pro's rules near the start and again at the very end, after the rules about the quest log and the place. */
 export function withProRules(prompt: string, canSearch: boolean, screenshot = false, pro = true): string {

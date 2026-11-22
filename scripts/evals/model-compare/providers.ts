@@ -58,7 +58,7 @@ if (process.env.REUSE && !fs.existsSync(OUT)) {
 const MODE = process.env.MODE || 'standard';
 const caps = fs.readFileSync(process.env.CAPTURED || `${DIR}/captured.jsonl`, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
   .map((c) => (MODE === 'standard' ? c : { ...c, id: String(c.id).endsWith(`~${MODE}`) ? String(c.id).slice(0, -MODE.length - 1) : '' }))
-  .filter((c) => /^[rcsdn]\d+$/.test(c.id))
+  .filter((c) => /^[rcsdnl]\d+$/.test(c.id))
   // ROUTE=1: the live prompt's last rule (WHAT_NEXT_IN_FULL, Nov 21 2026), which these captures predate.
   // ROUTE=2: version 2 instead. Newer captures already end with version 1; it is taken out first so each runs once.
   .map((c) => {
@@ -131,21 +131,31 @@ async function askClaude(model: string, c: any) {
 }
 
 const openai = new OpenAI();
+const LOOKUP_RULE = `[QUICK LOOKUP]
+This is a simple factual lookup. Give the answer first, in one or two sentences, then at most two short details that help (where exactly, a requirement, a cost). No route, no next steps, no headings. If you are not sure of the exact fact, search once rather than guess.`;
 async function askOpenAI(model: string, c: any) {
   const input: any[] = turns(c).map((t) => t.role === 'assistant'
     ? { role: 'assistant', content: t.parts.map((p) => p.text || '').join('\n') }
     : { role: 'user', content: t.parts.map((p) => p.inlineData ? { type: 'input_image', image_url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}`, detail: 'auto' } : { type: 'input_text', text: p.text || ' ' }) });
-  const req: any = { model, instructions: c.systemInstruction, input, max_output_tokens: 16000, reasoning: { effort: 'low' }, ...(c.withSearch ? { tools: [{ type: 'web_search' }] } : {}) };
+  // "gpt-6.2-sol@lite" (simple-lookup test, Nov 21 2026): minimal reasoning, at most one search, a short direct answer.
+  const lite = levelOf(model) === 'lite';
+  const req: any = {
+    model: baseOf(model), input,
+    instructions: lite ? `${c.systemInstruction}\n\n${LOOKUP_RULE}` : c.systemInstruction,
+    max_output_tokens: lite ? 2500 : 16000, reasoning: { effort: lite ? 'minimal' : 'low' },
+    ...(c.withSearch ? { tools: [{ type: 'web_search' }], ...(lite ? { max_tool_calls: 1 } : {}) } : {}),
+  };
   let r: any;
   try { r = await openai.responses.create(req); }
   catch (e: any) {
-    if (e?.status === 400 && /reasoning/i.test(String(e?.message))) { delete req.reasoning; r = await openai.responses.create(req); } else throw e;
+    if (e?.status === 400 && /max_tool_calls/i.test(String(e?.message))) { delete req.max_tool_calls; r = await openai.responses.create(req); }
+    else if (e?.status === 400 && /reasoning|minimal/i.test(String(e?.message))) { req.reasoning = lite ? { effort: 'low' } : undefined; if (!req.reasoning) delete req.reasoning; r = await openai.responses.create(req); } else throw e;
   }
   const u = r.usage || {};
   return { text: String(r.output_text || ''), inTok: Number(u.input_tokens || 0), outTok: Number(u.output_tokens || 0), searches: (r.output || []).filter((o: any) => o.type === 'web_search_call').length };
 }
 
-const once = (model: string, c: any) => (model.startsWith('gemini') ? askGemini(model, c) : model.startsWith('claude') ? askClaude(baseOf(model), c) : askOpenAI(baseOf(model), c));
+const once = (model: string, c: any) => (model.startsWith('gemini') ? askGemini(model, c) : model.startsWith('claude') ? askClaude(baseOf(model), c) : askOpenAI(model, c));
 const blank = (t: string) => !t.replace(/(?:```[a-z]*\s*)?<qc-[a-z-]+[^>]*>[\s\S]*?<\/qc-[a-z-]+>(?:\s*```)?/gi, '').replace(/<qc-[a-z-]+[^>]*\/>/gi, '').trim();
 // As the app does: an answer that only asks for a search ("ask" mode, <qc-search/>) is asked again with search on;
 // a blank answer is asked once more.

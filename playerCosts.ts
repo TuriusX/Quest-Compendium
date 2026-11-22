@@ -11,6 +11,36 @@ import { isTestId, isTestTraffic } from './testTraffic';
 
 export const costMonth = (t = Date.now()) => new Date(t).toISOString().slice(0, 7);
 
+/**
+ * The monthly safety cap (owner, Nov 21 2026): Firestore config/costCap { premiumMonthly, alertAt }. A Premium player
+ * whose AI cost this month reaches premiumMonthly gets quick answers (the quick model) until the 1st; the weekly summary
+ * names anyone past alertAt. Generous to start ($10 / $5) while real use is learned; changeable without a deploy.
+ */
+export type CostCap = { premiumMonthly: number; alertAt: number };
+export const COST_CAP_DEFAULTS: CostCap = { premiumMonthly: 10, alertAt: 5 };
+let capCache: { at: number; value: CostCap } | null = null;
+export async function costCap(): Promise<CostCap> {
+  if (capCache && Date.now() - capCache.at < 60_000) return capCache.value;
+  let value = COST_CAP_DEFAULTS;
+  try {
+    const d: any = (await getFirestore().collection('config').doc('costCap').get()).data() || {};
+    const n = (v: unknown, def: number) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : def);
+    value = { premiumMonthly: n(d.premiumMonthly, COST_CAP_DEFAULTS.premiumMonthly), alertAt: n(d.alertAt, COST_CAP_DEFAULTS.alertAt) };
+  } catch {}
+  capCache = { at: Date.now(), value };
+  return value;
+}
+/** What a player's answers have cost so far this month (0 when unknown: the cap never blocks on a failed read). */
+export async function monthSpent(uid: string): Promise<number> {
+  if (!uid) return 0;
+  try {
+    const d: any = (await getFirestore().collection('playerCosts').doc(costMonth()).collection('players').doc(uid).get()).data();
+    return Number(d?.dollars) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Add one answer's cost to the player's month (in the background: the answer never waits on it). */
 export function recordPlayerCost(p: { uid: string; premium: boolean; guest: boolean; dollars: number; searches: number }): void {
   if (!p.uid || isTestTraffic(p.uid)) return; // test scripts and local servers aren't players
