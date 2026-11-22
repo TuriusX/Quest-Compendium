@@ -41,6 +41,7 @@ import { getApiBaseUrl, setApiBaseUrl, testBackendHealth, DEFAULT_CLOUD_URL } fr
 import { LOCALES, normalizeLocale, useT } from '../i18n';
 import { UpdateCheck } from './AppUpdates';
 import { padPreset } from '../utils/padGlyphs';
+import { QcButtonCard } from './QcButtonCard';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -55,7 +56,7 @@ interface SettingsModalProps {
   onOpenPlan?: () => void;
 }
 
-type TabId = 'appearance' | 'persona' | 'shortcuts' | 'connection' | 'account';
+type TabId = 'appearance' | 'persona' | 'shortcuts' | 'controller' | 'connection' | 'account';
 
 const isMacPlatform = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
 
@@ -307,6 +308,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: 'appearance', label: tr('set.nav.appearance'), icon: Palette },
     { id: 'persona', label: tr('set.nav.companion'), icon: Bot },
     { id: 'shortcuts', label: tr('set.nav.shortcuts'), icon: Keyboard },
+    // Its own tab (owner, Nov 22 2026: the Quest Compendium button as visible as possible).
+    { id: 'controller', label: tr('set.pad'), icon: Gamepad2 },
     { id: 'account', label: tr('set.nav.account'), icon: User },
   ];
 
@@ -1074,8 +1077,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
+              </div>
+            )}
+
+            {activeTab === 'controller' && (
+              <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
                 {/* Controller */}
-                <div className="space-y-3 pt-4 border-t border-white/[0.08]">
+                <div className="space-y-3">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
                     <Gamepad2 className="w-4 h-4 text-[var(--accent-color)]" />
                     <span>{tr('set.pad')}</span>
@@ -1103,6 +1111,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   {settings.controllerEnabled !== false && (
                     <>
+                      {/* A button the game never sees (owner, Nov 22 2026): first, so it's the first thing seen. */}
+                      <QcButtonCard settings={settings} onUpdateSettings={onUpdateSettings} onBlip={() => playBlipSound(soundEnabled)} />
                       {/* Button names (controller mode step 4): automatic, or the player's controller. */}
                       <div className="space-y-2">
                         <div className="text-xs font-semibold text-white">{tr('set.pad.style')}</div>

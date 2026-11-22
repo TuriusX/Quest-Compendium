@@ -138,6 +138,10 @@ function createControllerService(opts) {
   let stickOutL = false;
   // Buttons (and triggers) down on the last read: the panel hands focus back to the game only once they're all let go.
   let heldBits = 0;
+  // When the controller was last touched (a button, a stick past its dead zone or a trigger), visible or not: a
+  // keyboard shortcut sent by a controller's macro button (Alt+Q from a back paddle) then opens the quick menu for the
+  // controller (owner, Nov 22 2026).
+  let lastActiveAt = 0;
 
   function tick() {
     const t = now();
@@ -177,6 +181,7 @@ function createControllerService(opts) {
       rt = Math.max(rt, g.bRightTrigger || 0);
     }
     heldBits = buttons | (lt > 30 ? 0x10000 : 0) | (rt > 30 ? 0x20000 : 0);
+    if (heldBits || Math.max(Math.abs(lx), Math.abs(ly), Math.abs(rx), Math.abs(ry)) > 12000) lastActiveAt = t;
 
     // Show / hide combo (a 1-second hold or a double-tap). Works whether or not the overlay is visible.
     if (combo.step(buttons, t).fire) {
@@ -373,7 +378,7 @@ function createControllerService(opts) {
   // Tests: the combo firing, and input as if from the controller.
   const _toggle = () => opts.onToggle();
   const _input = (evt) => opts.onInput(evt);
-  return { available, setConfig, stop, whenReleased, _tick: tick, _toggle, _input };
+  return { available, setConfig, stop, whenReleased, lastActiveAt: () => lastActiveAt, _tick: tick, _toggle, _input };
 }
 
 module.exports = { createControllerService, BTN };

@@ -160,6 +160,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onLocateRequest: (callback) => { ipcRenderer.removeAllListeners('locate-request'); ipcRenderer.on('locate-request', (event, r) => callback(r)); },
   setControllerConfig: (cfg) => ipcRenderer.send('set-controller-config', cfg),
   getControllerStatus: () => ipcRenderer.invoke('get-controller-status'),
+  // Settings' "Test my button" for the Quest Compendium button (owner, Nov 22 2026).
+  qcButtonTest: (on) => ipcRenderer.send('qc-button-test', !!on),
+  onQcButtonPressed: (callback) => { ipcRenderer.removeAllListeners('qc-button-pressed'); ipcRenderer.on('qc-button-pressed', (event, info) => callback(info)); return () => ipcRenderer.removeAllListeners('qc-button-pressed'); },
   onControllerInput: (callback) => { ipcRenderer.removeAllListeners('controller-input'); ipcRenderer.on('controller-input', (event, evt) => callback(evt)); },
   // A PlayStation controller started sending (sonyPads.cjs): the app shows its button names.
   onControllerKind: (callback) => { ipcRenderer.removeAllListeners('controller-kind'); ipcRenderer.on('controller-kind', (event, kind) => callback(String(kind || ''))); },

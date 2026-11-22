@@ -995,10 +995,18 @@ app.whenReady().then(() => {
    */
   function toggleQuickMenu(mode, keys) {
       if (!mainWindow || mainWindow.isDestroyed()) return;
+      // The Quest Compendium button's test in Settings (owner, Nov 22 2026): the press is reported there, nothing opens.
+      const fromPad = mode === 'keys' && padUsedRecently();
+      if (qcButtonTesting && settingsWindow && !settingsWindow.isDestroyed()) {
+        settingsWindow.webContents.send('qc-button-pressed', { via: mode, keys: keys || '', fromPad: mode === 'pad' || fromPad });
+        return;
+      }
       if (quickWheel.isOpen()) {
         quickWheel.close();
       } else if (quickWheel.hasItems()) {
-        openQuickMenu(mode === 'keys' ? { mode: 'keys', keys: acceleratorKeys(keys) } : { mode: 'pad' });
+        // The shortcut sent by a controller's macro button (a back paddle set to Alt+Q, the controller used a moment
+        // ago): the quick menu for the controller, driven by the sticks, not the hold-and-point of the keyboard.
+        openQuickMenu(mode === 'keys' && !fromPad ? { mode: 'keys', keys: acceleratorKeys(keys) } : { mode: 'pad' });
       } else if (isAppVisible) {
         slideOut();
       } else {
@@ -1039,6 +1047,21 @@ app.whenReady().then(() => {
       if (fanAt) answerCard.setFan(true);
       quickWheel.show(items, fanAt ? { ...how, fan: { ...fanAt, accent: (appLook && appLook.accent) || s.accent || '' } } : how);
   }
+  /** The controller was used within the last 20 seconds (a macro button's shortcut then belongs to the controller). */
+  function padUsedRecently() {
+    const at = controllerService && controllerService.lastActiveAt ? controllerService.lastActiveAt() : 0;
+    return !!at && Date.now() - at < 20000;
+  }
+  // Settings' "Test my button" (owner, Nov 22 2026): while on, the quick menu's shortcut and combo are reported to
+  // Settings instead of opening the menu. Off again when Settings closes or after two minutes.
+  let qcButtonTesting = false;
+  let qcButtonTestTimer = null;
+  ipcMain.on('qc-button-test', (event, on) => {
+    if (!settingsWindow || settingsWindow.isDestroyed() || event.sender !== settingsWindow.webContents) return;
+    qcButtonTesting = !!on;
+    clearTimeout(qcButtonTestTimer);
+    if (qcButtonTesting) qcButtonTestTimer = setTimeout(() => { qcButtonTesting = false; }, 120000);
+  });
   /** A shortcut's keys as the page's KeyboardEvent.key names, lower case ('Alt+Q' -> ['alt', 'q']): letting any go picks. */
   function acceleratorKeys(acc) {
     const names = { commandorcontrol: 'control', cmdorctrl: 'control', ctrl: 'control', control: 'control', alt: 'alt', option: 'alt', shift: 'shift', super: 'meta', meta: 'meta', cmd: 'meta', command: 'meta', space: ' ', plus: '+' };

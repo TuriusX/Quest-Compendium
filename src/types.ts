@@ -356,6 +356,10 @@ export interface AppSettings {
   locateShortcut?: string;
   /** The quick menu (the wheel) from the keyboard: hold and point with the mouse, or tap (default Alt+Q). */
   quickMenuShortcut?: string;
+  /** When the Quest Compendium button (a macro button sending the quick menu shortcut) last passed Settings' test. */
+  qcButtonWorkedAt?: number;
+  /** How the player set up their Quest Compendium button (Settings card), to show the matching steps. */
+  qcButtonRoute?: 'steam' | 'elite' | 'software' | 'none';
   /** The microphone for voice questions (a device id; empty: Windows' default). Nov 18 2026: a DualSense's mic. */
   micDeviceId?: string;
   /** Find the markers again on the screen as it is now (default Ctrl+Shift+M; markers v2). */
