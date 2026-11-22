@@ -260,7 +260,15 @@ export type ClaimSlot = {
   sentence?: number;
   text: string;
 };
-export type ClaimVerdict = ClaimSlot & { verdict: 'supported' | 'unsupported' | 'contradicted' | 'general'; evidence: string[]; fix?: string; why?: string };
+export type ClaimVerdict = ClaimSlot & { verdict: 'supported' | 'unsupported' | 'contradicted' | 'general'; evidence: string[]; fix?: string; why?: string; keep?: string };
+
+/**
+ * Trimming (owner, Nov 22 2026: on after an 8-page test, items kept 31 -> 42, contradicted 10 -> 4): an unsupported claim
+ * that is only partly unsupported comes back cut down to what the evidence does say ("keep"), and the page keeps that
+ * instead of losing the whole claim. CLAIM_TRIM=0 turns it off.
+ */
+export const claimTrimOn = () => process.env.CLAIM_TRIM !== '0';
+const TRIM_RULE = '"keep" (for an "unsupported" claim only): when PART of it is supported, the claim cut down to only the parts the evidence supports, in the same form (cite those evidence ids in "evidence"); leave "keep" out when no specific fact would be left. Never add anything to it.';
 
 /** The page's draft, as the claim slots are cut from it. */
 export type ClaimPage = {
@@ -315,7 +323,8 @@ export function claimPrompt(game: string, area: string, slots: ClaimSlot[], evid
   return [
     `Check a guide page for the video game "${game}", the area "${area}", claim by claim against the EVIDENCE (sentences from sources, each with an id).`,
     ...CLAIM_RULES,
-    'Reply with JSON only: an array with one object per claim: {"id": "K1", "verdict": "supported|unsupported|contradicted|general", "evidence": ["e4"], "fix": "...", "why": "a few words"}.',
+    ...(claimTrimOn() ? [TRIM_RULE] : []),
+    `Reply with JSON only: an array with one object per claim: {"id": "K1", "verdict": "supported|unsupported|contradicted|general", "evidence": ["e4"], "fix": "..."${claimTrimOn() ? ', "keep": "..."' : ''}, "why": "a few words"}.`,
     '',
     'EVIDENCE:',
     evidence,
@@ -380,7 +389,10 @@ export function parseClaims(text: string, slots: ClaimSlot[], ev: EvidencePack):
     if ((verdict === 'supported' || verdict === 'contradicted') && !evidence.length) verdict = 'unsupported';
     // Only a step sentence, advice or a how-to can be "general"; anything else states a fact by construction.
     if (verdict === 'general' && s.kind !== 'sentence' && s.kind !== 'advice' && s.kind !== 'how') verdict = 'unsupported';
-    return { ...s, verdict, evidence, ...(r.fix ? { fix: cut(r.fix, 400) } : {}), ...(r.why ? { why: cut(r.why, 200) } : {}) };
+    // A trimmed claim needs evidence ids of its own (an unsupported verdict's "evidence" are the trimmed part's sources).
+    // Never a missable reason or a placement: being missable needs evidence that says so outright, and a step either covers the place or not.
+    const keep = claimTrimOn() && verdict === 'unsupported' && r.keep && evidence.length && !['missable', 'placement', 'fight', 'consequence'].includes(s.kind) ? cut(r.keep, 400) : '';
+    return { ...s, verdict, evidence, ...(r.fix ? { fix: cut(r.fix, 400) } : {}), ...(keep ? { keep } : {}), ...(r.why ? { why: cut(r.why, 200) } : {}) };
   });
 }
 

@@ -633,7 +633,10 @@ function applyClaimVerdicts(d: Draft, verdicts: ClaimVerdict[], services: string
   for (const v of verdicts) {
     if (v.verdict === 'supported' || v.verdict === 'general') continue;
     const n = Number(v.label.slice(1)) - 1;
-    const fix = v.verdict === 'contradicted' && v.fix && v.evidence.length ? v.fix : undefined;
+    // A contradicted claim corrected, or (CLAIM_TRIM) an unsupported one cut down to what the evidence says.
+    const trimmed = v.verdict === 'unsupported' && v.keep ? v.keep : undefined;
+    const fix = (v.verdict === 'contradicted' && v.fix && v.evidence.length ? v.fix : undefined) || trimmed;
+    const after = (t: string, lead: string) => (lead && t.toLowerCase().startsWith(lead.toLowerCase()) ? t.slice(lead.length).replace(/^\s*:\s*/, '') : t).trim();
     const note = { label: v.label, kind: v.kind, claim: v.text, verdict: v.verdict, ...(v.why ? { why: v.why } : {}), ...(fix ? { fixedTo: fix } : {}) };
     if (v.kind === 'sentence' && d.steps[n] && v.sentence !== undefined) {
       if (!cutSentence.has(n)) cutSentence.set(n, new Map());
@@ -644,18 +647,18 @@ function applyClaimVerdicts(d: Draft, verdicts: ClaimVerdict[], services: string
       removed.push(note);
     } else if (v.kind === 'how' && v.entry) {
       const e = items.find((x) => x.id === v.entry);
-      if (e) { delete e.how; removed.push(note); }
+      if (e) { if (trimmed && after(trimmed, `How to get ${e.name || ''}`)) e.how = after(trimmed, `How to get ${e.name || ''}`); else delete e.how; removed.push(note); }
     } else if (v.kind === 'missable' && v.entry) {
       const e = items.find((x) => x.id === v.entry);
-      if (e) { delete e.lockout; e.missable = false; removed.push(note); }
+      if (e) { if (trimmed && after(trimmed, `${e.name || cut(e.text, 60)} can be permanently missed because`)) e.lockout = after(trimmed, `${e.name || cut(e.text, 60)} can be permanently missed because`); else { delete e.lockout; e.missable = false; } removed.push(note); }
     } else if (v.kind === 'location' && v.entry) {
       const e = items.find((x) => x.id === v.entry);
       // The slot is the location and its "how" together: a corrected location replaces both (the old how went with the wrong place).
-      if (e && fix && e.name) { e.where = fix; delete e.how; removed.push(note); }
+      if (e && fix && e.name) { e.where = trimmed ? after(trimmed, e.name) || fix : fix; delete e.how; removed.push(note); }
       else if (e) { dropEntry.add(e.id); removed.push(note); }
     } else if (v.kind === 'consequence' && d.choices[n]) { dropChoice.add(n); removed.push(note); }
-    else if (v.kind === 'advice' && advice[n]) { dropAdvice.add(n); removed.push(note); }
-    else if (v.kind === 'merchant' && services[n]) { dropService.add(n); removed.push(note); }
+    else if (v.kind === 'advice' && advice[n]) { if (trimmed) advice[n] = [advice[n][0], trimmed]; else dropAdvice.add(n); removed.push(note); }
+    else if (v.kind === 'merchant' && services[n]) { if (trimmed) services[n] = trimmed; else dropService.add(n); removed.push(note); }
     else if (v.kind === 'fight' && fights[n]) { dropFight.add(n); removed.push(note); }
     else if (v.kind === 'fight-rewards' && fights[n]) { fights[n] = { ...fights[n], rewards: undefined }; removed.push(note); }
     else if (v.kind === 'fight-weaknesses' && fights[n]) { fights[n] = { ...fights[n], weaknesses: undefined }; removed.push(note); }
