@@ -8,23 +8,29 @@
  * never told about it (owner, Nov 19 2026: summaries must not change the main answer, e.g. by nudging it shorter).
  */
 
-/** The summarizer's instructions. */
-export const CARD_SUMMARY_PROMPT = `You write the pop-up summary for a video game helper app. The player asked a question while playing; the
-answer below pops up over the game for about half a minute, and your summary is shown there and read aloud so the
-player can get straight back to what they were doing.
+/**
+ * The summarizer's instructions (owner, Nov 22 2026: blind test of 38 real answers, this on Gemini 4 Hydrogen low was
+ * picked most, 14 of 35, against 12 for the old instructions on GPT-6 Luna and 9 for these on Luna): the answer to
+ * what they asked first, then the action, in the answer's own voice.
+ */
+export const CARD_SUMMARY_PROMPT = `You write the pop-up summary for a video game helper app. The player asked a question while playing; the answer
+below pops up over the game for about half a minute, and your summary is shown there and read aloud, so the player
+gets what they need in a few seconds and goes back to playing. Say it the way the answer's author would say it out
+loud to a friend sitting next to them.
 
-Write what the player should do now:
-- The action, where (or with what), and the one thing to watch for if there is one. One or two short sentences that
-  sound natural spoken aloud, at most 40 words.
-- If the answer names something worth getting right now that is easy to miss or gone for good after this moment (an
-  item, a reward, a companion, and how to get it, e.g. "have Shadowheart cast Command: Drop on Zhalk to take the
-  Everburn Blade"), keep it: one more short sentence, even if that goes past 40 words (at most 55 in all). Never
-  drop it to keep the summary short.
-- Only what the answer says: never add facts, names, numbers or places it doesn't have. When the answer isn't sure,
-  the summary isn't either. When the answer is a hint, the summary is that hint, never the solution.
-- No background, lore, lists, markdown, links, citations or tags. The same language as the answer.
-- Reply with the summary only. When the answer has nothing to do (an error, a refusal, a question back to the player),
-  reply with nothing.`;
+- First, the answer to what they asked, in one plain sentence: the pick when they asked which or what to choose
+  ("Take Counterspell."), yes or no when they asked whether, the place when they asked where, who or what it is when
+  they asked who or what, the next step when they asked what to do next.
+- Then, only if the answer gives one, the action to take right now and the one thing to watch for. At most 45 words in all.
+- If the answer names something worth getting right now that is easy to miss or gone for good after this moment, keep
+  it in one more short sentence, even past 45 words (at most 60 in all).
+- If the player reacted to something (a death, a win, a mistake), you may open with a few words for it, as the answer does.
+- Only what the answer says: never add facts, names, numbers or places. When the answer isn't sure, neither are you.
+- Spoken, not written: no lists, headings, markdown, links, citations or tags; no "the answer says". The same language as the answer.
+- Reply with the summary only. When the answer has nothing to say or do (an error, a refusal, only a question back), reply with nothing.`;
+/** The summarizer: Hydrogen low, as the answers (its thinking needs room: 400 tokens came back blank). */
+export const CARD_SUMMARY_MODEL = 'gemini-4-hydrogen';
+export const CARD_SUMMARY_MAX_TOKENS = 3000;
 
 /**
  * Immersive mode (owner, Nov 20 2026, idea #8): the answer is spoken by a narrator from the game's world, and the

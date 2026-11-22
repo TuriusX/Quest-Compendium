@@ -65,7 +65,7 @@ import { MISSING_RULES, extractMissing, saveMissingFacts, notOnPage } from './mi
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
-import { CARD_SUMMARY_PROMPT, CARD_SUMMARY_IMMERSIVE, summaryInput, cleanSummary } from './src/utils/cardSummary';
+import { CARD_SUMMARY_PROMPT, CARD_SUMMARY_IMMERSIVE, CARD_SUMMARY_MODEL, CARD_SUMMARY_MAX_TOKENS, summaryInput, cleanSummary } from './src/utils/cardSummary';
 import { SAVE_STATE_PROMPT, saveStateInput, parseSaveState } from './src/utils/saveState';
 import { SESSION_NOTE_PROMPT, sessionNoteInput, cleanSessionNote, cleanNoteRequest } from './src/utils/earlierSessions';
 import { decidePremium, stripeViewFor, cachedStripeView, forgetStripeView } from './premium';
@@ -2591,16 +2591,23 @@ percentages:
       const ai = getHelperClient();
       const r: any = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: CARD_SUMMARY_MODEL,
           contents: [{ role: 'user', parts: [{ text: summaryInput(question, answer, req.body?.hint === true) }] }],
           // Immersive mode: the summary keeps the narrator's voice (the action stays plain and exact).
-          config: { systemInstruction: CARD_SUMMARY_PROMPT + (req.body?.immersive === true ? CARD_SUMMARY_IMMERSIVE : ''), temperature: req.body?.immersive === true ? 0.5 : 0.2, maxOutputTokens: 400, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+          config: { systemInstruction: CARD_SUMMARY_PROMPT + (req.body?.immersive === true ? CARD_SUMMARY_IMMERSIVE : ''), temperature: req.body?.immersive === true ? 0.5 : 0.2, maxOutputTokens: CARD_SUMMARY_MAX_TOKENS, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
         }),
         12000,
         'card summary',
       );
-      logUsage('card-summary', 'gemini-3.8-flash', r);
-      return res.json({ summary: cleanSummary(r?.text || '') });
+      logUsage('card-summary', CARD_SUMMARY_MODEL, r);
+      const summary = cleanSummary(r?.text || '');
+      // The owner's pop-ups, logged until Dec 6 2026 (owner, Nov 22 2026: to find the summaries that miss): the question
+      // and the summary only, never the answer, and nobody else's.
+      const em = (req as any).user?.email;
+      if (Date.now() < Date.UTC(2026, 11, 6) && isOwnerEmail(typeof em === 'string' ? em.trim().toLowerCase() : null)) {
+        console.log(`[card-summary-owner] q=${JSON.stringify(question.slice(0, 300))} summary=${JSON.stringify(summary)}`);
+      }
+      return res.json({ summary });
     } catch (err: any) {
       console.log('card summary failed:', err?.message);
       return res.json({ summary: '' });
