@@ -133,7 +133,9 @@ export async function decide(ai: Gen, cost: Cost, o: { game: string; question: s
       ? '- "screen": draw on THEIR screenshot. Only when the screenshot is the game\'s own map and the answer says where to ' +
         'go or where something is on it; or the screenshot shows the very place the answer is about and the answer says ' +
         'which way to go, which path, door, ledge or lever to use, or what to hit here, and you can see those things in ' +
-        'the screenshot.\n'
+        'the screenshot. Never to circle one thing that looks like ordinary scenery (a rock among rocks, a patch of ' +
+        'ground, a bush) unless the screenshot shows its name or a highlight on it: a circle on the wrong rock is worse ' +
+        'than none.\n'
       : '') +
     '- "wiki": the player asks WHERE something is or HOW TO GET somewhere, the answer names the area' +
     (o.shot ? ', and their screenshot does NOT show that place or a map of it' : '') +
