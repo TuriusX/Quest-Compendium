@@ -35,7 +35,7 @@ import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor, baseGameKey } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL, openaiModelFor, openaiSiteModel } from './chatRouting';
-import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL, QUICK_LOOKUP_RULE } from './searchPolicy';
+import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL, QUICK_LOOKUP_RULE, splitPerQuestion } from './searchPolicy';
 import { asksWhatNext } from './src/utils/whatNext';
 import { isSimpleLookup } from './src/utils/simpleLookup';
 import { recordPlayerCost, registerPlayerCosts, costCap, monthSpent } from './playerCosts';
@@ -1385,6 +1385,12 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       // started alike and OpenAI's discount on a repeated prompt start (cached input, about 20x cheaper) never applied.
       const systemTimeLine = `[SYSTEM TIME: The current date and time is ${currentDate}. Always use this as the real present date.]`;
       let systemInstruction = '';
+      // The prompt split (owner, Nov 21 2026; config/chatRouting promptSplit, or QC_PROMPT_SPLIT=1 on a local server): the
+      // parts that change from question to question (marked with perQ) leave the system prompt and go at the end of the
+      // player's message, so the system prompt and the earlier conversation repeat exactly on a follow-up and are billed
+      // at the cached rate. Off, the prompt is exactly as before (the marks are simply dropped).
+      const promptSplit = !site && (process.env.QC_PROMPT_SPLIT === '1' || (await routing()).promptSplit === true);
+      const perQ = (s: string) => `\u0001${s}\u0002`;
       // Check if a game is detected either by local process detection, tab selection, or inquiry text
       const effectiveGame = activeGame || null;
       const isGameContextAvailable = !!effectiveGame;
@@ -1429,7 +1435,7 @@ Describe things the way the game does. A door is a door, not a "secret passage";
 
       // Markers only when the player has them on: nobody sees them otherwise, so they'd only cost tokens.
       if (imageBase64 && wantMarkers) {
-        systemInstruction += `
+        systemInstruction += perQ(`
 
 [ON-SCREEN POINTERS]
 When your answer refers to specific things that are visible in the game world in the screenshot (an item, container, lever, switch, door, character, enemy or enemy weak point, place, or the path to take), point at them so the player can see exactly where they are. After your answer, add ONE block in exactly this format:
@@ -1468,7 +1474,7 @@ If the player is asking about items, secrets or things to find, and you know of 
 - label: what it is (1 to 4 words); hint: where it is, described by what the spot looks like (a few words). Both in the player's language.
 - onThisMap: true ONLY if it is on the same map the player is on right now, so it would scroll into view just by walking around (no door, stairs, cave entrance or screen transition in between). false for anything inside a building, on another floor, in another room, or behind a transition.
 - Never list anything you already pointed at in <qc-points>: only other items.
-- Only list things you are confident about. Leave the block out when there are none, and never mention it in your answer text.`;
+- Only list things you are confident about. Leave the block out when there are none, and never mention it in your answer text.`);
       }
 
       // A quest-log title on every in-game answer (the objectives tracker shows it), markers or not.
@@ -1487,17 +1493,17 @@ End every answer with one line naming what the player is doing right now, like a
 - Never mention the title line in your answer text.`;
         // The quest log's steps: what the player should keep in front of them (src/utils/trackerPayload.ts).
         systemInstruction += STEPS_RULES;
-        if (objective) systemInstruction += objectiveRules(objective);
+        if (objective) systemInstruction += perQ(objectiveRules(objective));
         // A fight on screen: a battle plan, enemy and position markers, the steps as the plan (answerBar.ts).
-        if (imageBase64) systemInstruction += combatRules(wantMarkers);
+        if (imageBase64) systemInstruction += perQ(combatRules(wantMarkers));
       }
       // No screenshot with this question: nothing about the player's screen may be described or assumed (answers once
       // said "Based on your map of White Orchard" and "You're on the Windows desktop" without one).
       if (!imageBase64) {
-        systemInstruction += `
+        systemInstruction += perQ(`
 
 [NO SCREENSHOT WITH THIS QUESTION]
-No screenshot or image is attached to this question. Never describe, refer to or assume anything on the player's screen: not "on your screen", "your map", "your minimap", "your inventory", "you're on the desktop", "I can see", or where they are on a map. Either answer from the question itself (with the conversation and the verified facts above), or, if you can't answer well without seeing the game, ask for a screenshot in one short sentence in the player's language. You may still answer generally (for example list every Place of Power in each region) when that helps.`;
+No screenshot or image is attached to this question. Never describe, refer to or assume anything on the player's screen: not "on your screen", "your map", "your minimap", "your inventory", "you're on the desktop", "I can see", or where they are on a map. Either answer from the question itself (with the conversation and the verified facts above), or, if you can't answer well without seeing the game, ask for a screenshot in one short sentence in the player's language. You may still answer generally (for example list every Place of Power in each region) when that helps.`);
       }
 
       systemInstruction += `
@@ -1525,11 +1531,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       if (achievements && achievements.length > 0 && (history.length === 0 || mentionsAchievements)) {
         const unlocked = achievements.filter((a: any) => a.unlocked).map((a: any) => a.name);
         const locked = achievements.filter((a: any) => !a.unlocked).map((a: any) => a.name);
-        situationalContext += `\n[Player Achievements Status: Unlocked (${unlocked.length}): ${unlocked.slice(0, 15).join(', ')} | Locked (${locked.length}): ${locked.slice(0, 15).join(', ')}]\n`;
+        situationalContext += perQ(`\n[Player Achievements Status: Unlocked (${unlocked.length}): ${unlocked.slice(0, 15).join(', ')} | Locked (${locked.length}): ${locked.slice(0, 15).join(', ')}]\n`);
       }
 
       if (news && news.length > 0 && (history.length === 0 || mentionsNews)) {
-        situationalContext += `\n[Recent Game Patch Notes / News: ${news.slice(0, 3).map((n: any) => n.title || n).join('; ')}]\n`;
+        situationalContext += perQ(`\n[Recent Game Patch Notes / News: ${news.slice(0, 3).map((n: any) => n.title || n).join('; ')}]\n`);
       }
       
       // Where the player is. Many games reuse near-identical rooms, so the AI must not guess a place and build the
@@ -1558,7 +1564,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         place = { name: placeRead.area, confirmed: true };
         // A different area: the old story beat doesn't carry over.
         if (moved) story = placeRead.story ? { text: placeRead.story, confirmed: false } : null;
-        situationalContext += `\n[PLACE READ ON SCREEN: "${placeRead.seenText}", so the player is in ${placeRead.area}. A place read on screen overrides any stored or confirmed location, and anything earlier in this conversation about where they were: they are in ${placeRead.area} now, so answer for ${placeRead.area}.]\n`;
+        situationalContext += perQ(`\n[PLACE READ ON SCREEN: "${placeRead.seenText}", so the player is in ${placeRead.area}. A place read on screen overrides any stored or confirmed location, and anything earlier in this conversation about where they were: they are in ${placeRead.area} now, so answer for ${placeRead.area}.]\n`);
       }
       if (guideAreas.length) {
         situationalContext += `\n[AREAS IN THIS GAME'S GUIDE, in story order. When the player is in one of these, use its exact name as the place name: ${guideAreas.join(' | ')}]\n`;
@@ -1567,7 +1573,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       const areaIndex = place ? guideAreas.findIndex((a) => samePlace(a, place!.name)) : -1;
       if (areaIndex > 0 && !site) {
         const earlier = guideAreas.slice(Math.max(0, areaIndex - 8), areaIndex);
-        situationalContext += `\n[GUIDE ORDER: the player is in ${guideAreas[areaIndex]}, area ${areaIndex + 1} of ${guideAreas.length} in the guide's order. Steps, fights and events in earlier areas (${areaIndex > 8 ? '…, ' : ''}${earlier.join(', ')}) are assumed done, including the way into ${guideAreas[areaIndex]} (its gate, entrance or approach, and any fight there): never send the player back, tell them to go to or approach those places, or prepare them for those fights, even if earlier messages in this conversation did, unless they ask about it.]\n`;
+        situationalContext += perQ(`\n[GUIDE ORDER: the player is in ${guideAreas[areaIndex]}, area ${areaIndex + 1} of ${guideAreas.length} in the guide's order. Steps, fights and events in earlier areas (${areaIndex > 8 ? '…, ' : ''}${earlier.join(', ')}) are assumed done, including the way into ${guideAreas[areaIndex]} (its gate, entrance or approach, and any fight there): never send the player back, tell them to go to or approach those places, or prepare them for those fights, even if earlier messages in this conversation did, unless they ask about it.]\n`);
       }
       // The player's situation from the story point (owner, Nov 21 2026: right after BG3's crash an answer said "if you've
       // already recruited companions…" when every player lands alone, with Shadowheart on screen).
@@ -1580,7 +1586,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         .filter(Boolean)
         .slice(0, 30);
       if (doneList.length) {
-        situationalContext += `\n[ALREADY DONE in this game (most recent first): ${doneList.join(' | ')}. Never suggest doing any of these, or going back for them, unless the player asks about one.]\n`;
+        situationalContext += perQ(`\n[ALREADY DONE in this game (most recent first): ${doneList.join(' | ')}. Never suggest doing any of these, or going back for them, unless the player asks about one.]\n`);
       }
       // Playthrough memory (src/utils/playthrough.ts): the choices the player made, the key items they have and their
       // own notes, as the app sends them (at most 1,200 characters; the player sees and edits all of it).
@@ -1594,7 +1600,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           found.length ? `key items they have: ${found.join(' | ')}` : '',
           notes ? `their own notes: ${notes}` : '',
         ].filter(Boolean);
-        if (parts.length) situationalContext += `\n[YOUR PLAYTHROUGH (what the player's save looks like; they can see and edit this): ${parts.join('. ').slice(0, 1400)}. Fit the answer to it, but trust a newer screenshot or what the player says over it.]\n`;
+        if (parts.length) situationalContext += perQ(`\n[YOUR PLAYTHROUGH (what the player's save looks like; they can see and edit this): ${parts.join('. ').slice(0, 1400)}. Fit the answer to it, but trust a newer screenshot or what the player says over it.]\n`);
         // The save right now (owner, Nov 21 2026; src/utils/playthrough.ts SaveState): kept up to date after every answer
         // by /api/save-state, across sessions, so answers know the party and the story without guessing.
         const st = play.state && typeof play.state === 'object' ? play.state : null;
@@ -1607,7 +1613,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             f(st.story) ? `story so far: ${f(st.story)}` : '',
             open.length ? `still open: ${open.join(' | ')}` : '',
           ].filter(Boolean);
-          if (lines.length) situationalContext += `\n[THE PLAYER'S SAVE RIGHT NOW (kept up to date from their earlier questions, answers and screenshots, across sessions; they can edit it): ${lines.join('. ')}. Treat it as fact: who is in the party and what has happened are settled, so never write "if you've recruited…", "bring any companions you have" or the like about what this says. Only a newer screenshot or what the player says now overrides it.]\n`;
+          if (lines.length) situationalContext += perQ(`\n[THE PLAYER'S SAVE RIGHT NOW (kept up to date from their earlier questions, answers and screenshots, across sessions; they can edit it): ${lines.join('. ')}. Treat it as fact: who is in the party and what has happened are settled, so never write "if you've recruited…", "bring any companions you have" or the like about what this says. Only a newer screenshot or what the player says now overrides it.]\n`);
         }
       }
       // Earlier topics and "what next" (owner, Nov 21 2026: after leaving BG3's Nautiloid an answer added "you don't need
@@ -1617,14 +1623,14 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         situationalContext += `\n[WHAT NEXT: when the player asks what to do next or where to go, give the route a good walkthrough takes from here, in order: first what is still open close by and worth doing before moving on (companions or party members to recruit, key items, short side quests here, from the guide's steps not yet done and the save above), then the fights or dangers on the way with how to handle or avoid them, then the main objective. Don't skip straight to the main objective, and don't send them into a fight without saying it's coming.]\n`;
       }
       if (story?.confirmed) {
-        situationalContext += `\n[PLAYER'S CONFIRMED STORY POINT: ${story.text}. The player confirmed this; trust it over your own guess, and only mention what's available at this point.]\n`;
+        situationalContext += perQ(`\n[PLAYER'S CONFIRMED STORY POINT: ${story.text}. The player confirmed this; trust it over your own guess, and only mention what's available at this point.]\n`);
       } else if (story) {
-        situationalContext += `\n[Last known story point (an earlier guess, not confirmed): ${story.text}]\n`;
+        situationalContext += perQ(`\n[Last known story point (an earlier guess, not confirmed): ${story.text}]\n`);
       }
       if (place?.confirmed) {
-        situationalContext += `\n[PLAYER'S CONFIRMED LOCATION: ${place.name}. The player confirmed this. Trust it over your own guess from the screenshot, unless the screen clearly shows they've moved somewhere else.]\n`;
+        situationalContext += perQ(`\n[PLAYER'S CONFIRMED LOCATION: ${place.name}. The player confirmed this. Trust it over your own guess from the screenshot, unless the screen clearly shows they've moved somewhere else.]\n`);
       } else if (place) {
-        situationalContext += `\n[Last known location (an earlier guess, not confirmed by the player): ${place.name}]\n`;
+        situationalContext += perQ(`\n[Last known location (an earlier guess, not confirmed by the player): ${place.name}]\n`);
       }
       systemInstruction += `
 
@@ -1697,7 +1703,7 @@ percentages:
         text: [question || '', ...history.slice(-4).map((m: any) => (typeof m?.text === 'string' ? m.text : ''))].join('\n'),
         place: place?.name,
       });
-      if (knownFacts) systemInstruction += `\n\n${knownFacts}`;
+      if (knownFacts) systemInstruction += perQ(`\n\n${knownFacts}`);
       // The guide page for where the player is: background notes for this answer only (never saved as facts).
       const guidePage = await guidePageFor(effectiveGame?.name, place?.name, gameAppId, guideKey);
       // A checked page (its entries verified; search-pack pages awaiting re-verification are not): its entries come first, preferred over the model's own knowledge, and the answer
@@ -1707,15 +1713,15 @@ percentages:
         if (guidePage.verified) {
           const g = guideGroundingForPrompt(guidePage);
           guideTags = g.refs;
-          systemInstruction += `\n\n${g.text}`;
-        } else systemInstruction += `\n\n${guideNotesForPrompt(guidePage)}`;
+          systemInstruction += perQ(`\n\n${g.text}`);
+        } else systemInstruction += perQ(`\n\n${guideNotesForPrompt(guidePage)}`);
         // This area's fights and enemies in full, for a battle plan when the screenshot shows a fight.
         const fights = imageBase64 ? guideFightNotes(guidePage) : '';
-        if (fights) systemInstruction += `\n\n${fights}`;
+        if (fights) systemInstruction += perQ(`\n\n${fights}`);
         // Player corrections to these notes that were verified: used right away, before the page is republished.
         const corrected = await verifiedCorrectionsForPrompt(guidePage.key, guidePage.slug);
-        if (corrected) systemInstruction += `\n\n${corrected}`;
-        systemInstruction += `\n${CORRECTION_RULES}${MISSING_RULES}`;
+        if (corrected) systemInstruction += perQ(`\n\n${corrected}`);
+        systemInstruction += perQ(`\n${CORRECTION_RULES}${MISSING_RULES}`);
       }
       // The website: the rest of the guide that matches the question, as reference in the same way, for its links.
       if (site?.reference) {
@@ -1726,11 +1732,11 @@ percentages:
       // Guide-backed markers (roadmap item 7): with a screenshot and markers on, the area's guide entries the player
       // hasn't ticked (the app sends its ticks for the area), so the answer can mark any that are visible. No extra call.
       const guideMarkable = imageBase64 && wantMarkers && guidePage ? guideEntriesForMarkers(guidePage, req.body.guideDone) : [];
-      if (guideMarkable.length) systemInstruction += `\n\n${guideMarkersPrompt(guideMarkable)}`;
+      if (guideMarkable.length) systemInstruction += perQ(`\n\n${guideMarkersPrompt(guideMarkable)}`);
       // A quick question (a chip in the app): its short label is the question, and this is what it asks for
       // (src/utils/quickQuestions.ts). "Show me where" only makes sense with markers on.
       const quick = isQuickId(req.body.quick) && !(req.body.quick === 'where' && !wantMarkers) ? req.body.quick : null;
-      if (quick) systemInstruction += `\n\n[QUICK QUESTION: the player tapped "${String(question || '').slice(0, 80)}"]\n${QUICK_PROMPTS[quick]}`;
+      if (quick) systemInstruction += perQ(`\n\n[QUICK QUESTION: the player tapped "${String(question || '').slice(0, 80)}"]\n${QUICK_PROMPTS[quick]}`);
       // (No hint levels or hint questions since Nov 20 2026, owner: answers go straight to the full answer. An older app's
       // "Just a hint" isn't a quick question any more, so it gets a full answer too.)
       // The kind of question (for the Quality numbers), and the model: Pro when the player's Pro question is answered by
@@ -1748,7 +1754,7 @@ percentages:
           const more = await withTimeout(appGuideLines(guideKey, String(question), guidePage?.slug || ''), 4000, 'Guide lines') as Awaited<ReturnType<typeof appGuideLines>>;
           if (more.text) {
             guideTags = { ...guideTags, ...more.refs };
-            systemInstruction += `\n\n${more.text}`;
+            systemInstruction += perQ(`\n\n${more.text}`);
           }
         } catch (e: any) {
           console.log('[chat] no guide lines:', String(e?.message || e).slice(0, 120));
@@ -1780,7 +1786,7 @@ percentages:
         try {
           const f = await withTimeout(factsForQuestion(guideKey || baseGameKey(effectiveGame.name), String(question), guidePage?.slug || ''), 3000, 'Checked facts') as Awaited<ReturnType<typeof factsForQuestion>>;
           if (f.count) {
-            systemInstruction += `\n\n${f.text}`;
+            systemInstruction += perQ(`\n\n${f.text}`);
             searchMode = 'ask';
             factsUsed = f.count;
           }
@@ -1793,15 +1799,19 @@ percentages:
         : await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
       const searchTools = searchOk && searchMode !== 'ask';
       systemInstruction += `\n\n${EXISTENCE_RULES}`;
-      if (searchMode === 'force') systemInstruction += `\n\n${FORCE_RULES(effectiveGame!.name, release!.text)}`;
+      if (searchMode === 'force') systemInstruction += perQ(`\n\n${FORCE_RULES(effectiveGame!.name, release!.text)}`);
       if (!searchOk) {
-        systemInstruction += `\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. If something is unfamiliar, say there isn't enough information about it yet and ask for a screenshot or a detail. Don't mention search limits to the player.`;
+        systemInstruction += perQ(`\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. If something is unfamiliar, say there isn't enough information about it yet and ask for a screenshot or a detail. Don't mention search limits to the player.`);
       }
-      if ((usePro || fastApp) && !site) systemInstruction = withProRules(systemInstruction, searchOk, !!imageBase64, usePro);
+      if ((usePro || fastApp) && !site) systemInstruction = withProRules(systemInstruction, searchOk, !!imageBase64, usePro, promptSplit ? perQ : undefined);
       // Last in the prompt, as in the Nov 21 2026 tests (WHAT_NEXT_IN_FULL in searchPolicy.ts), and only for "what next"
       // questions: other questions did a little better without it.
-      if (!site && asksWhatNext(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null))) systemInstruction += `\n\n${WHAT_NEXT_IN_FULL}`;
-      systemInstruction += `\n\n${systemTimeLine}`;
+      if (!site && asksWhatNext(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null))) systemInstruction += perQ(`\n\n${WHAT_NEXT_IN_FULL}`);
+      systemInstruction += perQ(`\n\n${systemTimeLine}`);
+      // The split: marked parts out of the system prompt and, in order, into the end of the player's message (below).
+      const split = splitPerQuestion(systemInstruction, promptSplit);
+      systemInstruction = split.system;
+      const perQuestionText = split.perQuestion;
       // Ask mode: the first try has no search, and may ask for it.
       const firstSystem = searchMode === 'ask' && searchOk ? `${systemInstruction}\n\n${ASK_RULES}` : systemInstruction;
       let searchAsked = false;
@@ -1922,6 +1932,13 @@ percentages:
           contentsPayload[contentsPayload.length - 1].parts.push(...currentParts);
       } else {
           contentsPayload.push({ role: 'user', parts: currentParts });
+      }
+      // The prompt split: this question's own context goes last, after the question, so everything before it (the system
+      // prompt and the earlier conversation) repeats exactly on the next question.
+      if (perQuestionText) {
+        contentsPayload[contentsPayload.length - 1].parts.push({
+          text: `[APP CONTEXT FOR THIS QUESTION: added by the app, not written by the player. Follow it like the rules above; it overrides them where they differ.]\n\n${perQuestionText}`,
+        });
       }
 
       // Banner Generation: Only run if specifically requested in the payload and do not block chat
@@ -2630,6 +2647,9 @@ percentages:
   type PlaceOut = { name: string; sure: boolean; options: string[]; story?: string; storySure?: boolean; storyOptions?: string[]; seenText?: string };
   function extractPlace(text: string): { text: string; place: PlaceOut | null } {
     let place: PlaceOut | null = null;
+    // A line the AI forgot to close (seen Nov 21 2026: "<qc-place>{…}" at the end with no "</qc-place>") is closed here,
+    // so it's read and removed like any other instead of showing up in the answer.
+    text = text.replace(/<qc-place>(\s*\{[^<]*\})\s*$/i, '<qc-place>$1</qc-place>');
     const cleaned = text.replace(/<qc-place>([\s\S]*?)<\/qc-place>/gi, (_m, body) => {
       try {
         const p = JSON.parse(String(body).trim());

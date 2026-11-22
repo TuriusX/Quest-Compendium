@@ -237,11 +237,27 @@ This is a simple factual lookup. Give the answer first, in one or two sentences,
 
 /** Fast in the app uses the same rules on Flash since Nov 5 2026 (`pro` false: the same words, without saying the player chose Pro). */
 /** The prompt with Pro's rules near the start and again at the very end, after the rules about the quest log and the place. */
-export function withProRules(prompt: string, canSearch: boolean, screenshot = false, pro = true): string {
+export function withProRules(prompt: string, canSearch: boolean, screenshot = false, pro = true, perQuestion?: (s: string) => string): string {
   const rules = PRO_RULES(canSearch, screenshot, pro);
-  const system = prompt.replace(/\[STORY TIMING\][\s\S]*?(?=\n\n\[)/, () => PRO_STORY_TIMING).replace(/\[NO SCREENSHOT WITH THIS QUESTION\][\s\S]*?(?=\n\n\[)/, () => PRO_NO_SCREENSHOT).replace(/3\. MISSING IMAGE HANDLING:[^\n]*/, () => PRO_MISSING_IMAGE);
+  // (The lookaheads allow a per-question mark, \u0002, before the next section: see splitPerQuestion.)
+  const system = prompt.replace(/\[STORY TIMING\][\s\S]*?(?=\u0002?\n\n\[)/, () => PRO_STORY_TIMING).replace(/\[NO SCREENSHOT WITH THIS QUESTION\][\s\S]*?(?=\u0002?\n\n\[)/, () => PRO_NO_SCREENSHOT).replace(/3\. MISSING IMAGE HANDLING:[^\n]*/, () => PRO_MISSING_IMAGE);
   const end = system.includes(PROMPT_PERSONA_END) ? PROMPT_PERSONA_END : ROLEPLAY_PERSONA_END;
   const at = system.indexOf(end);
-  const start = at < 0 ? system : `${system.slice(0, at + end.length)}\n\n${rules}${system.slice(at + end.length)}`;
-  return `${start}\n\n${rules}`;
+  // Split prompt: the copy near the start is the same for every question (no search or screenshot lines, which depend on
+  // the question), so the system prompt repeats exactly; the full rules for this question go at the end, per question.
+  const head = perQuestion ? PRO_RULES(false, false, pro) : rules;
+  const start = at < 0 ? system : `${system.slice(0, at + end.length)}\n\n${head}${system.slice(at + end.length)}`;
+  return perQuestion ? `${start}${perQuestion(`\n\n${rules}`)}` : `${start}\n\n${rules}`;
+}
+
+/**
+ * The prompt split (owner, Nov 21 2026): text marked \u0001…\u0002 (server.ts perQ) is what changes from question to
+ * question. On: it leaves the system prompt, in order, to go at the end of the player's message. Off: the marks are
+ * dropped and the prompt is exactly as before.
+ */
+export function splitPerQuestion(text: string, on: boolean): { system: string; perQuestion: string } {
+  if (!on) return { system: text.replace(/[\u0001\u0002]/g, ''), perQuestion: '' };
+  const parts: string[] = [];
+  const system = text.replace(/\u0001([\s\S]*?)\u0002/g, (_m, s: string) => { parts.push(s.trim()); return ''; }).replace(/[\u0001\u0002]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  return { system, perQuestion: parts.filter(Boolean).join('\n\n') };
 }

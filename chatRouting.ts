@@ -32,8 +32,10 @@ export type Routing = {
    * place reading, drawn answers' decisions. What OpenAI can't do (video by link, images out) stays on Gemini.
    */
   openaiHelpers: boolean;
+  /** The prompt split for cheaper follow-ups (owner, Nov 21 2026; server.ts promptSplit): off until its quality test passes. */
+  promptSplit?: boolean;
 };
-export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [], openaiOwner: false, openaiSite: false, openaiHelpers: false };
+export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [], openaiOwner: false, openaiSite: false, openaiHelpers: false, promptSplit: false };
 
 /** The OpenAI model for a website question, or '' for Gemini. */
 export function openaiSiteModel(r: Routing, pro: boolean): string {
@@ -83,6 +85,7 @@ export function normalizeRouting(d: any): Routing {
     openaiOwner: d?.openaiOwner === true,
     openaiSite: d?.openaiSite === true,
     openaiHelpers: d?.openaiHelpers === true,
+    promptSplit: d?.promptSplit === true,
   };
 }
 
