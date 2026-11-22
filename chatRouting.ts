@@ -34,8 +34,20 @@ export type Routing = {
   openaiHelpers: boolean;
   /** The prompt split for cheaper follow-ups (owner, Nov 21 2026; server.ts promptSplit): off until its quality test passes. */
   promptSplit?: boolean;
+  /**
+   * The app's Gemini models (owner, Nov 22 2026: Hydrogen medium for questions, Hydrogen low for the faster ones, after
+   * blind picks over his own BG3 chats): geminiPro '' = PRO_CHAT_MODEL; geminiFast '' = the Flash models as before (every
+   * player gets geminiFast when it's set, so free and Premium answers sound the same). Thinking 'low' | 'medium' | 'high'.
+   * proFallback answers when geminiPro fails (not when it's too slow: then Flash, as before). The website is unchanged.
+   */
+  geminiPro?: string; geminiProThinking?: Thinking; geminiFast?: string; geminiFastThinking?: Thinking; proFallback?: string;
+  /** The voice rule (searchPolicy.ts VOICE_RULE) on the app's answers. */
+  voiceRule?: boolean;
 };
-export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [], openaiOwner: false, openaiSite: false, openaiHelpers: false, promptSplit: false };
+export type Thinking = 'low' | 'medium' | 'high';
+export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [], openaiOwner: false, openaiSite: false, openaiHelpers: false, promptSplit: false, geminiPro: '', geminiProThinking: 'low', geminiFast: '', geminiFastThinking: 'low', proFallback: '', voiceRule: false };
+const geminiName = (v: unknown) => (/^gemini-[a-z0-9.-]+$/i.test(String(v || '')) ? String(v) : '');
+const thinking = (v: unknown, d: Thinking): Thinking => (v === 'low' || v === 'medium' || v === 'high' ? v : d);
 
 /** The OpenAI model for a website question, or '' for Gemini. */
 export function openaiSiteModel(r: Routing, pro: boolean): string {
@@ -86,6 +98,12 @@ export function normalizeRouting(d: any): Routing {
     openaiSite: d?.openaiSite === true,
     openaiHelpers: d?.openaiHelpers === true,
     promptSplit: d?.promptSplit === true,
+    geminiPro: geminiName(d?.geminiPro),
+    geminiProThinking: thinking(d?.geminiProThinking, 'low'),
+    geminiFast: geminiName(d?.geminiFast),
+    geminiFastThinking: thinking(d?.geminiFastThinking, 'low'),
+    proFallback: geminiName(d?.proFallback),
+    voiceRule: d?.voiceRule === true,
   };
 }
 

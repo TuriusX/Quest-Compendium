@@ -13,7 +13,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { gemini } from '../../guides/common';
 import { GoogleGenAI, HarmBlockThreshold, HarmCategory, ThinkingLevel } from '@google/genai';
-import { WHAT_NEXT_IN_FULL_V1 as WHAT_NEXT_IN_FULL, WHAT_NEXT_IN_FULL_V2, WHAT_NEXT_IN_FULL_V3 } from '../../../searchPolicy';
+import { WHAT_NEXT_IN_FULL_V1 as WHAT_NEXT_IN_FULL, WHAT_NEXT_IN_FULL_V2, WHAT_NEXT_IN_FULL_V3, WHY_FOR_THIS_RUN, WHY_FOR_THIS_RUN_V2, WHY_FOR_THIS_RUN_V3, VOICE_RULE, comingUpNote } from '../../../searchPolicy';
 
 const DIR = 'scratchpad/model-compare';
 const OUT = process.env.RESULTS || `${DIR}/results-providers.jsonl`;
@@ -56,9 +56,10 @@ if (process.env.REUSE && !fs.existsSync(OUT)) {
 
 // CAPTURED=<file> reads another capture file; MODE=roleplay takes the Immersive captures (ids "r1~roleplay") under their plain ids.
 const MODE = process.env.MODE || 'standard';
+const COMING_UP: Record<string, string> = fs.existsSync(`${DIR}/comingup.json`) ? JSON.parse(fs.readFileSync(`${DIR}/comingup.json`, 'utf8')) : {};
 const caps = fs.readFileSync(process.env.CAPTURED || `${DIR}/captured.jsonl`, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
   .map((c) => (MODE === 'standard' ? c : { ...c, id: String(c.id).endsWith(`~${MODE}`) ? String(c.id).slice(0, -MODE.length - 1) : '' }))
-  .filter((c) => /^[rcsdnl]\d+$/.test(c.id))
+  .filter((c) => /^[rcsdnlw]\d+$/.test(c.id))
   // ROUTE=1: the live prompt's last rule (WHAT_NEXT_IN_FULL, Nov 21 2026), which these captures predate.
   // ROUTE=2: version 2 instead. Newer captures already end with version 1; it is taken out first so each runs once.
   .map((c) => {
@@ -66,12 +67,26 @@ const caps = fs.readFileSync(process.env.CAPTURED || `${DIR}/captured.jsonl`, 'u
     if (process.env.ROUTE === '1') return { ...c, systemInstruction: `${base}\n\n${WHAT_NEXT_IN_FULL}` };
     if (process.env.ROUTE === '2') return { ...c, systemInstruction: `${base}\n\n${WHAT_NEXT_IN_FULL_V2}` };
     if (process.env.ROUTE === '3') return { ...c, systemInstruction: `${base}\n\n${WHAT_NEXT_IN_FULL_V3}` };
+    // ROUTE=why: the captured prompt as it is, plus the "why, for this run" rule at the end (Nov 21 2026 test).
+    if (process.env.ROUTE === 'why') return { ...c, systemInstruction: `${c.systemInstruction}\n\n${WHY_FOR_THIS_RUN}` };
+    // ROUTE=why2 / why2note ("closer to Gemini" test, Nov 21 2026): version 2 of the rule; why2note also adds the
+    // "coming up" note (scratchpad/model-compare/comingup.json, checked guide pages only) to the question's app context.
+    if (process.env.ROUTE === 'why2' || process.env.ROUTE === 'why2note') {
+      const note = process.env.ROUTE === 'why2note' ? String(COMING_UP[c.id] || '') : '';
+      const contents = note ? c.contents.map((t: any, i: number) => (i === c.contents.length - 1 ? { ...t, parts: [...t.parts, { text: `\n\n${comingUpNote(note)}` }] } : t)) : c.contents;
+      return { ...c, contents, systemInstruction: `${c.systemInstruction}\n\n${WHY_FOR_THIS_RUN_V2}` };
+    }
+    // ROUTE=why3: version 3 (version 2 plus the "friend who knows this run" voice line).
+    // ROUTE=voice: the voice rule from the owner's own Gemini chat (Nov 21 2026).
+    if (process.env.ROUTE === 'voice') return { ...c, systemInstruction: `${c.systemInstruction}\n\n${VOICE_RULE}` };
+    if (process.env.ROUTE === 'why3') return { ...c, systemInstruction: `${c.systemInstruction}\n\n${WHY_FOR_THIS_RUN_V3}` };
     if (process.env.ROUTE === '0') return { ...c, systemInstruction: base };
     return c;
   });
 const done = new Set(fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((x) => !x.error).map((x) => `${x.id}|${x.model}`) : []);
 const reusedPro = new Map<string, any>();
-if (fs.existsSync(`${DIR}/results-hydrogen.jsonl`)) {
+// Only for the original captures: other capture files reuse ids (c1…) for different questions (Nov 22 2026 bug).
+if (!process.env.CAPTURED && fs.existsSync(`${DIR}/results-hydrogen.jsonl`)) {
   for (const l of fs.readFileSync(`${DIR}/results-hydrogen.jsonl`, 'utf8').trim().split('\n')) {
     const x = JSON.parse(l);
     if (x.model === 'gemini-3.1-pro-preview' && x.text && !x.error) reusedPro.set(x.id, x);
@@ -142,7 +157,7 @@ async function askOpenAI(model: string, c: any) {
   const req: any = {
     model: baseOf(model), input,
     instructions: lite ? `${c.systemInstruction}\n\n${LOOKUP_RULE}` : c.systemInstruction,
-    max_output_tokens: lite ? 2500 : 16000, reasoning: { effort: lite ? 'minimal' : 'low' },
+    max_output_tokens: lite ? 2500 : 16000, reasoning: { effort: lite ? 'minimal' : ['medium', 'high'].includes(levelOf(model)) ? levelOf(model) : 'low' },
     ...(c.withSearch ? { tools: [{ type: 'web_search' }], ...(lite ? { max_tool_calls: 1 } : {}) } : {}),
   };
   let r: any;

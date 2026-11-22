@@ -80,19 +80,39 @@ export function topUp(b: Balances, now = Date.now()): { pro: number; fast: numbe
   };
 }
 
-/** A free or guest day's amounts, as what the balance goes back to: "2 Pro · 5 Fast". */
-export const resetParts = (u: { pro: number; fast: number }, t: (k: string, v?: Record<string, string | number>) => string) =>
-  [u.pro > 0 ? t('topup.back', { model: t('model.pro'), n: u.pro }) : '', u.fast > 0 ? t('topup.back', { model: t('model.fast'), n: u.fast }) : ''].filter(Boolean).join(' · ');
+/**
+ * One count of questions (owner, Nov 22 2026): players never see the two kinds. The total left, and what the next
+ * top-up adds to it.
+ */
+export const questionsLeft = (b: { pro: number; fast: number }) => b.pro + b.fast;
+type T = (k: string, v?: Record<string, string | number>) => string;
+/** A free or guest day's amount, as what the balance goes back to: "5 questions". */
+export const resetParts = (u: { pro: number; fast: number }, t: T) => t('topup.backQ', { n: u.pro + u.fast });
+/** What the next Premium top-up adds: "+25 questions", or that they're already holding the most they can. */
+export const addParts = (u: { pro: number; fast: number; proMax: boolean; fastMax: boolean }, t: T) => {
+  const n = (u.proMax ? 0 : u.pro) + (u.fastMax ? 0 : u.fast);
+  return n > 0 ? t('topup.addQ', { n }) : t('topup.fullQ');
+};
 
-/** The top-up as one line: "+8 Pro · +25 Fast in 13h 20m" ("Pro at max 100 · +25 Fast in 45m"); free and guest: "Back to 2 Pro · 5 Fast in 13h 20m". */
-export function topUpLine(b: Balances, t: (k: string, v?: Record<string, string | number>) => string, now = Date.now()): string {
+/** The top-up as one line: "+25 questions in 13h 20m"; free and guest: "Back to 5 questions in 13h 20m". */
+export function topUpLine(b: Balances, t: T, now = Date.now()): string {
   const u = topUp(b, now);
   if (!u) return '';
   const when = u.h > 0 ? t('topup.hm', { h: u.h, m: u.m }) : t('topup.m', { m: u.m });
   if (u.reset) return t('topup.backLine', { parts: resetParts(u, t), when });
-  const part = (model: string, n: number, max: boolean) => (max ? t('topup.max', { model, n: u.cap }) : n > 0 ? t('topup.add', { model, n }) : '');
-  const parts = [part(t('model.pro'), u.pro, u.proMax), part(t('model.fast'), u.fast, u.fastMax)].filter(Boolean).join(' · ');
-  return t('topup.line', { parts, when });
+  return t('topup.line', { parts: addParts(u, t), when });
+}
+
+/**
+ * The model named on an answer's grey line (owner, Nov 22 2026: show which model answered, e.g. "Gemini 4 Hydrogen
+ * (medium)"; no Best / Quick). Older answers get readable names; '' for the app's own notes.
+ */
+export function modelLabel(modelUsed?: string): string {
+  const m = String(modelUsed || '').trim();
+  if (!m || /offline|limit reached|session expired|unavailable|^eval$|^app$/i.test(m)) return '';
+  const gpt = m.match(/\((gpt-[a-z0-9.-]+)\)/i)?.[1] || (/^gpt-/i.test(m) ? m : '');
+  if (gpt) return gpt.replace(/^gpt-/i, 'GPT-').replace(/-([a-z])/g, (_x, c) => ` ${c.toUpperCase()}`);
+  return m.replace(/\s*\((?:emergency )?fallback\)/i, '');
 }
 
 /**

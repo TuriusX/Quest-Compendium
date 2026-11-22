@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, f
 import { NextQuestionsLine } from './QuestionsPill';
 import { AnswerMeter } from './AnswerMeter';
 import { createPortal } from 'react-dom';
-import { balancesOf, modelKind, readAnswerModel, saveAnswerModel, startingModel, type AnswerModel } from '../utils/answerModel';
+import { balancesOf, modelLabel, readAnswerModel, saveAnswerModel, startingModel, type AnswerModel } from '../utils/answerModel';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
@@ -461,12 +461,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [modelSlot, setModelSlot] = useState<HTMLElement | null>(null);
   useEffect(() => { setModelSlot(document.getElementById('qc-model-slot')); }, []);
   const preferredModel: 'pro' | 'flash' = answerModel === 'fast' ? 'flash' : 'pro';
-  // Only running out of best answers is worth a word; getting them back (a new day) shows in the meter.
-  const noteSwitch = (to: AnswerModel) => {
-    if (to !== 'fast') return;
-    // Stays until the next question is sent, so it isn't missed while reading the answer.
-    setModelNote(t('ask.lastBest'));
-  };
+  // Switching between the server's two models is silent (owner, Nov 22 2026): players only see questions left.
+  const noteSwitch = (_to: AnswerModel) => {};
   const chooseModel = (m: AnswerModel) => {
     setAnswerModel(m);
     saveAnswerModel(m);
@@ -491,7 +487,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // The server answered with the other model (the chosen one was used up), or a controller's R3 switched.
   useEffect(() => {
     const switched = (e: Event) => {
-      if ((e as CustomEvent).detail?.monthCap) { setModelNote(t('ask.monthCap')); return; }
+      if ((e as CustomEvent).detail?.monthCap) return;
       const to = (e as CustomEvent).detail?.to === 'fast' ? 'fast' : 'pro';
       setAnswerModel(to);
       noteSwitch(to);
@@ -1860,7 +1856,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     // One small grey line: "Fast · 10:38" (there's only one speaker; Spot it says so)
                     <span className="text-zinc-500 font-sans">
                       {[
-                        msg.kind === 'spot' || msg.kind === 'help' ? msg.modelUsed : modelKind(msg.modelUsed) ? t(modelKind(msg.modelUsed) === 'pro' ? 'ask.best' : 'ask.quick') : '',
+                        msg.kind === 'spot' || msg.kind === 'help' ? msg.modelUsed : modelLabel(msg.modelUsed),
                         new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                       ].filter(Boolean).join(' · ')}
                     </span>

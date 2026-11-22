@@ -35,7 +35,7 @@ import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor, baseGameKey } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL, openaiModelFor, openaiSiteModel } from './chatRouting';
-import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL, QUICK_LOOKUP_RULE, splitPerQuestion } from './searchPolicy';
+import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL, QUICK_LOOKUP_RULE, VOICE_RULE, splitPerQuestion } from './searchPolicy';
 import { asksWhatNext } from './src/utils/whatNext';
 import { isSimpleLookup } from './src/utils/simpleLookup';
 import { readSaveState, writeSaveState } from './saveStateStore';
@@ -1361,10 +1361,11 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
         return res.status(429).json({
           text: isGuest
             // Guests are asked to sign in (more questions today, conversations saved), never sent to Premium.
-            ? `You've used today's guest questions. Sign in to keep going: ${allow.free.pro} Pro and ${allow.free.flash} Fast questions a day, and your conversations saved on all your devices.`
+            // One count of questions (owner, Nov 22 2026): players never see the two kinds.
+            ? `You've used today's guest questions. Sign in to keep going: ${allow.free.pro + allow.free.flash} questions a day, and your conversations saved on all your devices.`
             : isPremium
-            ? `You've used today's Pro and Fast questions. They're topped up at midnight, and what you don't use carries over.`
-            : `You've used today's ${p.pro} Pro and ${p.flash} Fast questions. They reset at midnight. Premium gives you ${allow.premium.pro} Pro and ${allow.premium.flash} Fast questions a day, and what you don't use carries over.${offerLine ? ` ${offerLine}` : ''}`,
+            ? `You've used today's questions. They're topped up at midnight, and what you don't use carries over.`
+            : `You've used today's ${p.pro + p.flash} questions. They reset at midnight. Premium gives you ${allow.premium.pro + allow.premium.flash} questions a day, and what you don't use carries over.${offerLine ? ` ${offerLine}` : ''}`,
           modelUsed: 'Limit Reached',
           limit: {
             resetAt, isPremium, dailyPro: p.pro, dailyFlash: p.flash, premiumPro: allow.premium.pro, premiumFlash: allow.premium.flash,
@@ -1756,7 +1757,10 @@ percentages:
       const usePro = evalCapture ? true : !overCap && picked.bucket === 'pro' && (await takePlayerPro(routingCfg));
       // Fast in the app (Flash, for players with full access; Flash-Lite for the rest is unchanged) gets the same rules, search from the first
       // try and guide lines as Pro, thinking low (owner, Nov 5 2026: 12 test questions, 5 wrong claims against 6, median 14 s against 27).
-      const fastApp = !site && !usePro && targetModel === MAIN_MODEL;
+      // The app's faster answers on Gemini 4 Hydrogen (owner, Nov 22 2026: config/chatRouting geminiFast), for every player.
+      const appFastModel = !site ? routingCfg.geminiFast || '' : '';
+      if (appFastModel && !usePro) targetModel = appFastModel;
+      const fastApp = !site && !usePro && (targetModel === MAIN_MODEL || (!!appFastModel && targetModel === appFastModel));
       // Pro in the app: the guide lines that match the question, from anywhere in the guide (the area's page alone often has
       // nothing on it, and with no place known there was no guide at all). A slow read just goes without.
       if ((usePro || fastApp) && !site && guideKey && String(question || '').trim()) {
@@ -1814,6 +1818,8 @@ percentages:
         systemInstruction += perQ(`\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. If something is unfamiliar, say there isn't enough information about it yet and ask for a screenshot or a detail. Don't mention search limits to the player.`);
       }
       if ((usePro || fastApp) && !site) systemInstruction = withProRules(systemInstruction, searchOk, !!imageBase64, usePro, promptSplit ? perQ : undefined);
+      // The voice (owner, Nov 22 2026; searchPolicy.ts VOICE_RULE): the same every question, so it stays in the cached part.
+      if ((usePro || fastApp) && !site && routingCfg.voiceRule) systemInstruction += `\n\n${VOICE_RULE}`;
       // Last in the prompt, as in the Nov 21 2026 tests (WHAT_NEXT_IN_FULL in searchPolicy.ts), and only for "what next"
       // questions: other questions did a little better without it.
       if (!site && asksWhatNext(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null))) systemInstruction += perQ(`\n\n${WHAT_NEXT_IN_FULL}`);
@@ -1984,7 +1990,10 @@ percentages:
 
       // Query Gemini API
       let responseText = '';
-      let modelUsed = targetModel === MAIN_MODEL ? 'Gemini 3.8 Flash' : 'Gemini Flash-Lite';
+      const GEMINI_NAMES: Record<string, string> = { 'gemini-4-hydrogen': 'Gemini 4 Hydrogen', 'gemini-3.1-pro-preview': 'Gemini 3.1 Pro', [MAIN_MODEL]: 'Gemini 3.8 Flash' };
+      const nameOf = (m: string) => GEMINI_NAMES[m] || m;
+      // Shown under the answer (owner, Nov 22 2026): which model and, for Hydrogen, how much it thought ("(medium)", "(low)").
+      let modelUsed = targetModel === FREE_MODEL ? 'Gemini Flash-Lite' : appFastModel && targetModel === appFastModel ? `${nameOf(targetModel)} (${routingCfg.geminiFastThinking || 'low'})` : nameOf(targetModel);
       // The OpenAI model that answered ('' for Gemini): its own marker step below.
       let oaAnswered = '';
       // First attempts given up on: billed, but never reported back (the website's dollars a day count them).
@@ -2030,8 +2039,11 @@ percentages:
             responseText = 'No response received. Please try asking again.';
           }
         } else {
-          const answerModel = usePro ? PRO_CHAT_MODEL : targetModel;
-          if (usePro) modelUsed = 'Gemini 3.1 Pro';
+          const answerModel = usePro ? routingCfg.geminiPro || PRO_CHAT_MODEL : targetModel;
+          if (usePro) modelUsed = routingCfg.geminiPro ? `${nameOf(answerModel)} (${routingCfg.geminiProThinking || 'low'})` : nameOf(answerModel);
+          // Thinking: low as before, unless config/chatRouting sets it (Hydrogen medium for questions, Nov 22 2026).
+          const THINK = { low: ThinkingLevel.LOW, medium: ThinkingLevel.MEDIUM, high: ThinkingLevel.HIGH };
+          const thinkLevel = usePro ? THINK[routingCfg.geminiProThinking || 'low'] : appFastModel && targetModel === appFastModel ? THINK[routingCfg.geminiFastThinking || 'low'] : ThinkingLevel.LOW;
           // OpenAI answers (openaiAnswer.ts; config/chatRouting openaiPro / openaiFast, for a share of players): the app's
           // Pro and Fast, not the website (yet). Gemini answers instead when OpenAI is down or overloaded.
           const oaOwner = isOwnerEmail(typeof (req as any).user?.email === 'string' ? String((req as any).user.email).trim().toLowerCase() : null);
@@ -2056,7 +2068,7 @@ percentages:
               temperature: 0.7,
               // The website thinks less before it writes: the first words in 1-9 s instead of 14-28, with answers as full (Nov 3 2026).
               // Pro thinks low (owner, Nov 5 2026: about 15 s is the goal, 30 s the limit): with the Pro rules, search and guide lines it holds up; medium took 36-50 s.
-              ...(usePro ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : targetModel === MAIN_MODEL ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {}),
+              ...(usePro || targetModel === MAIN_MODEL || (appFastModel && targetModel === appFastModel) ? { thinkingConfig: { thinkingLevel: thinkLevel } } : {}),
             }
           });
           const answerCall = (sys: string, withSearch: boolean): Promise<any> => {
@@ -2158,8 +2170,46 @@ percentages:
         if (/timed out/i.test(String(primaryErr?.message))) abandoned++;
         attempt++;
         site?.stream?.({ reset: true });
-        
-        try {
+
+        // The question model failed outright (an error, not too slow: then Flash below, so nobody waits twice): config/
+        // chatRouting proFallback answers it with the whole conversation, as a question (owner, Nov 22 2026: 3.1 Pro).
+        let proFallbackDone = false;
+        const pf = routingCfg.proFallback || '';
+        if (usePro && pf && pf !== (routingCfg.geminiPro || PRO_CHAT_MODEL) && !/timed out/i.test(String(primaryErr?.message))) {
+          try {
+            const pr: any = await withTimeout(ai.models.generateContent({
+              model: pf,
+              contents: contentsPayload,
+              config: {
+                systemInstruction,
+                ...(searchOk && !/\b429\b|RESOURCE_EXHAUSTED|quota/i.test(String(primaryErr?.message || '')) ? { tools: [{ googleSearch: {} }] } : {}),
+                safetySettings: [
+                  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
+                ],
+                temperature: 0.7,
+                thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+              },
+            }), 30000, 'Pro fallback query');
+            logUsage('chat-pro-fallback', pf, pr);
+            if (!isBlankAnswer(pr?.text || '')) {
+              searchesUsed += countSearches(pr);
+              searchSourcesSeen = searchSources(pr); groundingLinksSeen = groundingLinks(pr);
+              groundedSeen = groundedText(pr);
+              responseText = pr.text || '';
+              modelUsed = `${nameOf(pf)} (Fallback)`;
+              charge(true);
+              await saveBalances();
+              proFallbackDone = true;
+            }
+          } catch (e: any) {
+            console.log('[chat] Pro fallback failed, Flash answers:', String(e?.message || e).slice(0, 160));
+          }
+        }
+
+        if (!proFallbackDone) try {
           // Fallback retry
           const retryPromise = ai.models.generateContent({
             model: 'gemini-3.8-flash',

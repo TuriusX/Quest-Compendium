@@ -19,7 +19,7 @@ export type Bucket = 'pro' | 'flash';
 export type PlanAllowance = { pro: number; flash: number; rollover: boolean; cap: number };
 export type Allowances = { premium: PlanAllowance; free: PlanAllowance; guest: PlanAllowance };
 export const ALLOWANCE_DEFAULTS: Allowances = {
-  premium: { pro: 8, flash: 25, rollover: true, cap: 100 },
+  premium: { pro: 10, flash: 15, rollover: true, cap: 100 },
   free: { pro: 2, flash: 5, rollover: false, cap: 0 },
   guest: { pro: 1, flash: 3, rollover: false, cap: 0 },
 };

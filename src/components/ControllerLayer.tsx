@@ -512,7 +512,7 @@ export function ControllerLayer({
     ...(desktop ? [{ key: 'shot', label: t('pad.shotAsk'), Icon: Camera, run: () => emit('trigger-auto-screenshot-submit') }] : []),
     ...(desktop ? [{ key: 'find', label: t('set.sc.findMarkers'), Icon: ScanSearch, run: () => emit('qc-find-markers') }] : []),
     { key: 'log', label: t('pad.questLog'), Icon: ScrollText, run: () => emit('qc-toggle-log') },
-    { key: 'model', label: t('pad.model'), Icon: Zap, run: () => emit('qc-toggle-answer-model') },
+    // (Pro / Fast left the menu Nov 22 2026: one count of questions, nothing to switch.)
     { key: 'games', label: t('pad.switchGame'), Icon: Gamepad2, run: () => emit('qc-open-games') },
     { key: 'type', label: t('pad.keyboard'), Icon: Keyboard, run: () => openKeyboardRef.current() },
     ...(desktop ? [{ key: 'settings', label: t('common.settings'), Icon: Settings, run: () => electronAPI()?.openSettingsWindow?.() }] : []),

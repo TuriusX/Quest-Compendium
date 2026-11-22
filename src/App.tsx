@@ -3422,11 +3422,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
             const when = tr('limit.in', { h, m });
             guestLimit = lim.isGuest === true;
             limitText = guestLimit
-              ? tr('limit.guest', { pro: lim.signedInPro ?? 2, fast: lim.signedInFlash ?? 5 })
+              ? tr('limit.guest', { n: (lim.signedInPro ?? 2) + (lim.signedInFlash ?? 3) })
               : lim.isPremium
               ? tr('limit.premium', { when })
               : lim.dailyPro != null
-                ? tr('limit.free', { pro: lim.dailyPro, fast: lim.dailyFlash, ppro: lim.premiumPro, pfast: lim.premiumFlash, when })
+                ? tr('limit.free', { n: Number(lim.dailyPro || 0) + Number(lim.dailyFlash || 0), pn: Number(lim.premiumPro || 0) + Number(lim.premiumFlash || 0), when })
                 : errorText;
             premiumNudge = !lim.isPremium && !guestLimit;
             // When the next questions arrive: "+2 Pro · +5 Fast in 3h 20m".

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useT } from '../i18n';
-import { balancesOf, topUp, resetParts } from '../utils/answerModel';
+import { balancesOf, topUp, resetParts, addParts } from '../utils/answerModel';
 
 /** Re-renders every second while the page is visible (the countdown), on the second. */
 function useSecond(): number {
@@ -53,10 +53,7 @@ export function RefillInfo({ userData }: { userData?: any }) {
   const refill = u && u.reset
     ? t('pill.reset', { parts: resetParts(u, t) })
     : u
-    ? t('pill.refill', { parts: [
-        u.proMax ? t('topup.max', { model: t('model.pro'), n: u.cap }) : u.pro > 0 ? t('topup.add', { model: t('model.pro'), n: u.pro }) : '',
-        u.fastMax ? t('topup.max', { model: t('model.fast'), n: u.cap }) : u.fast > 0 ? t('topup.add', { model: t('model.fast'), n: u.fast }) : '',
-      ].filter(Boolean).join(' · ') })
+    ? t('pill.refill', { parts: addParts(u, t) })
     : '';
   return (
     <div className="px-3 pt-2 pb-1 text-[12px] tabular-nums">
