@@ -97,6 +97,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { createControllerService } = require('./controller.cjs');
 const { createWheel } = require('./wheel.cjs');
+const { watchKey } = require('./keyHeld.cjs');
 const { createAnswerCard } = require('./answerCard.cjs');
 const { createSonyPads } = require('./sonyPads.cjs');
 const { createDrawLayer } = require('./drawLayer.cjs');
@@ -980,6 +981,11 @@ app.whenReady().then(() => {
       else tracker.key(action);
     },
     onToggle: () => toggleQuickMenu('pad'),
+    // Hold B to go back to the game (owner, Nov 22 2026): only on the panel itself (the quick menu and Settings keep
+    // B as it is). Held long enough, the panel slides away and the orb comes back.
+    canHoldB: () => !!mainWindow && !mainWindow.isDestroyed() && isAppVisible && mainWindow.isVisible() && !quickWheel.isOpen() &&
+      !(settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isFocused()),
+    onHoldB: () => { if (isAppVisible) slideOut(); },
     onInput: (evt) => {
       if (quickWheel.isOpen()) return quickWheel.input(evt);
       if (settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isFocused()) return settingsWindow.webContents.send('controller-input', evt);
@@ -996,7 +1002,8 @@ app.whenReady().then(() => {
   function toggleQuickMenu(mode, keys) {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       // The Quest Compendium button's test in Settings (owner, Nov 22 2026): the press is reported there, nothing opens.
-      const fromPad = mode === 'keys' && padUsedRecently();
+      // 'button': the Quest Compendium button's own key (Settings: qcButtonKey, default Scroll Lock), always the controller.
+      const fromPad = mode === 'button' || (mode === 'keys' && padUsedRecently());
       if (qcButtonTesting && settingsWindow && !settingsWindow.isDestroyed()) {
         settingsWindow.webContents.send('qc-button-pressed', { via: mode, keys: keys || '', fromPad: mode === 'pad' || fromPad });
         return;
@@ -1076,6 +1083,33 @@ app.whenReady().then(() => {
     return ok;
   };
   registerQuickMenuShortcut('Alt+Q');
+  /**
+   * The Quest Compendium button's key (owner, Nov 22 2026): one plain key games don't use, sent by a back paddle or macro
+   * button (Steam Input presses modifier combos like Alt+Q unreliably). Always opens the quick menu for the controller.
+   * Default backslash (the key under Backspace); 'off', or the quick menu's own shortcut, adds nothing.
+   */
+  const QC_HOLD_MS = 450;
+  let qcKeyWatch = null;
+  const registerQcButtonKey = (keys) => {
+    if (qcKeyWatch) { qcKeyWatch.stop(); qcKeyWatch = null; }
+    if (!keys || keys === 'off' || keys === quickMenuKeysNow) return false;
+    // Watched, not claimed (keyHeld.cjs): typing the key still works everywhere. Opening takes a HOLD (owner, Nov 22
+    // 2026: no accidental opens); a press while the menu is open closes it.
+    qcKeyWatch = watchKey(keys, QC_HOLD_MS, {
+      onPress: () => {
+        if (quickWheel.isOpen() && !qcButtonTesting) { toggleQuickMenu('button', keys); return 'handled'; }
+        return '';
+      },
+      onHold: () => toggleQuickMenu('button', keys),
+      // Let go too soon: nothing opens; Settings' test says to hold it.
+      onShort: () => {
+        if (qcButtonTesting && settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.webContents.send('qc-button-pressed', { via: 'short', keys, fromPad: true });
+      },
+    });
+    if (!qcKeyWatch.ok) console.warn(`[qc-button] can't watch ${keys}`);
+    return qcKeyWatch.ok;
+  };
+  registerQcButtonKey('Backslash');
 
   // The show/hide shortcut (Settings: hideAppShortcut, default Ctrl+Space), the same toggle whether the game or the
   // panel has focus. Registered here until the app sends its settings (update-shortcuts), then re-registered there.
@@ -1121,6 +1155,7 @@ app.whenReady().then(() => {
     // The quick menu from the keyboard (Settings: quickMenuShortcut, default Alt+Q; "off" for none).
     quickMenuKeysNow = '';
     if (shortcuts.quickMenuShortcut !== 'off') registerQuickMenuShortcut(shortcuts.quickMenuShortcut || 'Alt+Q');
+    registerQcButtonKey(shortcuts.qcButtonKey || 'Backslash');
 
     const voiceCmd = shortcuts.voiceInputShortcut || 'CommandOrControl+Shift+V';
     try {

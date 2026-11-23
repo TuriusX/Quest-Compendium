@@ -360,6 +360,8 @@ export interface AppSettings {
   qcButtonWorkedAt?: number;
   /** How the player set up their Quest Compendium button (Settings card), to show the matching steps. */
   qcButtonRoute?: 'steam' | 'elite' | 'software' | 'none';
+  /** The one key the Quest Compendium button sends (default backslash, the key under Backspace; Steam Input presses Alt+Q unreliably). */
+  qcButtonKey?: string;
   /** The microphone for voice questions (a device id; empty: Windows' default). Nov 18 2026: a DualSense's mic. */
   micDeviceId?: string;
   /** Find the markers again on the screen as it is now (default Ctrl+Shift+M; markers v2). */

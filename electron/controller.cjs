@@ -98,6 +98,8 @@ const { comboFor, chordFor, createComboDetector, createChord, createHoldToTalk, 
 
 /** Triggers past this (0-255) count as pressed: they page through long answers. */
 const TRIGGER_DOWN = 128;
+const HOLD_B_MS = 900;      // hold B this long to go back to the game
+const HOLD_B_SHOW_MS = 200; // the ring shows from here (a quick tap never flashes it)
 
 /**
  * @param {{ onToggle: () => void, onInput: (evt: object) => void, isVisible: () => boolean, readPad?: (i: number) => object|null, now?: () => number }} opts
@@ -142,6 +144,10 @@ function createControllerService(opts) {
   // keyboard shortcut sent by a controller's macro button (Alt+Q from a back paddle) then opens the quick menu for the
   // controller (owner, Nov 22 2026).
   let lastActiveAt = 0;
+  // Hold B to go back to the game (owner, Nov 22 2026): while the panel is up (opts.canHoldB), B's press waits for its
+  // release. Let go before HOLD_B_MS: B's normal press. Held HOLD_B_MS: opts.onHoldB() (the panel slides away). From
+  // HOLD_B_SHOW_MS the app shows a ring around B that fills as it's held ({ type: 'hold', button: 'b', state }).
+  let bHold = null; // { at, shown, done } while a holdable B is down
 
   function tick() {
     const t = now();
@@ -217,6 +223,31 @@ function createControllerService(opts) {
       else if (ev === 'tap') talkTap = true;
     }
 
+    // Hold B (see bHold above). Not when B is part of the show / hide combo or the talk button.
+    const bDown = (buttons & BTN.B) !== 0;
+    const bWasDown = (prevButtons & BTN.B) !== 0;
+    const bFree = !(combo.mask & BTN.B) && talkBit !== BTN.B;
+    if (bDown && !bWasDown && bFree && visible && opts.canHoldB && opts.canHoldB()) bHold = { at: t, shown: false, done: false };
+    if (bHold) {
+      if (bDown) {
+        if (!bHold.shown && t - bHold.at >= HOLD_B_SHOW_MS) {
+          bHold.shown = true;
+          opts.onInput({ type: 'hold', button: 'b', state: 'start', ms: HOLD_B_MS - HOLD_B_SHOW_MS });
+        }
+        if (!bHold.done && t - bHold.at >= HOLD_B_MS) {
+          bHold.done = true;
+          opts.onInput({ type: 'hold', button: 'b', state: 'done' });
+          if (opts.onHoldB) opts.onHoldB();
+        }
+      } else {
+        if (!bHold.done) {
+          if (bHold.shown) opts.onInput({ type: 'hold', button: 'b', state: 'cancel' });
+          if (opts.isVisible()) opts.onInput({ type: 'button', button: 'b' });
+        }
+        bHold = null;
+      }
+    }
+
     // Simple buttons. Combo members report on release (and only if the combo didn't fire; for a double-tap, only once
     // it can no longer complete), so starting the combo never triggers their normal action. The talk button reports
     // its taps from the hold-to-talk check above.
@@ -229,6 +260,7 @@ function createControllerService(opts) {
       const down = (buttons & bit) !== 0;
       const wasDown = (prevButtons & bit) !== 0;
       const member = (combo.mask & bit) !== 0;
+      if (bit === BTN.B && (bHold || (bWasDown && !bDown && bFree && visible && opts.canHoldB && opts.canHoldB()))) continue; // handled by the hold above
       if (member && suppressed.has(name)) {
         if (!down) { suppressed.delete(name); touched.delete(name); }
         continue;

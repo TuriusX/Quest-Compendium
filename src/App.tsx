@@ -809,6 +809,8 @@ export default function App() {
         questLogShortcut: settings.questLogShortcut || 'CmdOrCtrl+Shift+L',
         locateShortcut: settings.locateShortcut || 'CmdOrCtrl+Shift+K',
         quickMenuShortcut: settings.quickMenuShortcut || 'Alt+Q',
+        // The Quest Compendium button's key (Settings, Controller): only with the controller on.
+        qcButtonKey: settings.controllerEnabled === false ? 'off' : settings.qcButtonKey || 'Backslash',
         findMarkersShortcut: settings.findMarkersShortcut || 'CmdOrCtrl+Shift+M',
         // The owner's picture capture for the guides (admins only).
         ownerCaptureShortcut: userData?.isAdmin ? 'CmdOrCtrl+Shift+P' : '',
@@ -823,6 +825,8 @@ export default function App() {
     settings.questLogShortcut,
     settings.locateShortcut,
     settings.quickMenuShortcut,
+    settings.qcButtonKey,
+    settings.controllerEnabled,
     settings.findMarkersShortcut,
     userData?.isAdmin,
   ]);

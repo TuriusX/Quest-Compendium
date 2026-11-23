@@ -13,23 +13,31 @@ import { AppSettings } from '../types';
 
 type Route = NonNullable<AppSettings['qcButtonRoute']>;
 const ROUTES: Route[] = ['steam', 'elite', 'software', 'none'];
+/** The keys a button can send: one plain key games don't use (Steam Input presses combos like Alt+Q unreliably). */
+const BUTTON_KEYS = ['Backslash', 'Scrolllock', 'quick'] as const;
+const KEY_NAMES: Record<string, string> = { Backslash: '\\', Scrolllock: 'Scroll Lock', Insert: 'Insert' };
 
 export function QcButtonCard({ settings, onUpdateSettings, onBlip }: { settings: AppSettings; onUpdateSettings: (u: Partial<AppSettings>) => void; onBlip?: () => void }) {
   const tr = useT();
   const api = typeof window !== 'undefined' ? (window as any).electronAPI : null;
-  const keys = settings.quickMenuShortcut && settings.quickMenuShortcut !== 'off' ? settings.quickMenuShortcut : 'Alt+Q';
+  const quickKeys = settings.quickMenuShortcut && settings.quickMenuShortcut !== 'off' ? settings.quickMenuShortcut : 'Alt+Q';
+  // 'quick': the button sends the quick menu's own keyboard shortcut instead (works with controller apps that send combos).
+  const choice = settings.qcButtonKey && settings.qcButtonKey !== 'off' ? (settings.qcButtonKey === quickKeys ? 'quick' : settings.qcButtonKey) : 'Backslash';
+  const keys = choice === 'quick' ? quickKeys : choice;
   const route: Route = settings.qcButtonRoute || 'steam';
-  const [test, setTest] = useState<'idle' | 'waiting' | 'pad' | 'keys'>('idle');
+  const [test, setTest] = useState<'idle' | 'waiting' | 'pad' | 'keys' | 'short'>('idle');
   const timer = useRef<number | null>(null);
 
   // The test: main reports the shortcut (or the controller combo) instead of opening the quick menu.
   useEffect(() => {
-    if (test !== 'waiting' || !api?.qcButtonTest) return;
+    if ((test !== 'waiting' && test !== 'short') || !api?.qcButtonTest) return;
     api.qcButtonTest(true);
     const off = api.onQcButtonPressed?.((info: { via: string; fromPad: boolean }) => {
+      // Let go too soon: say to hold it, and keep listening.
+      if (info.via === 'short') { setTest('short'); return; }
       setTest(info.fromPad ? 'pad' : 'keys');
       api.qcButtonTest(false);
-      if (info.via === 'keys') onUpdateSettings({ qcButtonWorkedAt: Date.now() });
+      if (info.via === 'button' || info.via === 'keys') onUpdateSettings({ qcButtonWorkedAt: Date.now() });
     });
     timer.current = window.setTimeout(() => setTest('idle'), 60000);
     return () => {
@@ -40,7 +48,7 @@ export function QcButtonCard({ settings, onUpdateSettings, onBlip }: { settings:
   }, [test]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const worked = !!settings.qcButtonWorkedAt;
-  const caps = shortcutKeys(keys).map((k) => keyLabel(k));
+  const caps = KEY_NAMES[keys] ? [KEY_NAMES[keys]] : shortcutKeys(keys).map((k) => keyLabel(k));
 
   return (
     <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-dim)] p-4 space-y-3" id="qc-button-card">
@@ -57,14 +65,25 @@ export function QcButtonCard({ settings, onUpdateSettings, onBlip }: { settings:
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-300">
-        <span>{tr('qcb.setTo')}</span>
-        {caps.map((c, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && <span className="text-zinc-500">+</span>}
-            <kbd className="px-2 py-1 rounded-md bg-black/40 border border-white/15 text-white font-mono text-xs">{c}</kbd>
-          </React.Fragment>
-        ))}
+      <div className="space-y-2">
+        <div className="text-[11px] font-semibold text-white">{tr('qcb.keyQ')}</div>
+        <div className="grid grid-cols-3 gap-2">
+          {BUTTON_KEYS.map((k) => {
+            const on = choice === k;
+            const name = k === 'quick' ? shortcutKeys(quickKeys).map((x) => keyLabel(x)).join(' + ') : KEY_NAMES[k];
+            return (
+              <button
+                key={k}
+                aria-pressed={on}
+                onClick={() => { onBlip?.(); onUpdateSettings({ qcButtonKey: k === 'quick' ? quickKeys : k }); }}
+                className={`p-2 rounded-lg border text-left transition-colors cursor-pointer ${on ? 'bg-black/40 border-[var(--accent-border)]' : 'bg-black/20 border-white/[0.08] hover:border-white/20'}`}
+              >
+                <kbd className="px-1.5 py-0.5 rounded bg-black/40 border border-white/15 text-white font-mono text-[11px]">{name}</kbd>
+                <div className="text-[10px] text-zinc-400 mt-1">{tr(`qcb.key.${k}`)}</div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -95,15 +114,16 @@ export function QcButtonCard({ settings, onUpdateSettings, onBlip }: { settings:
           <div className="text-[11px] text-zinc-300 min-w-0" aria-live="polite">
             {test === 'idle' && tr('qcb.testIdle')}
             {test === 'waiting' && <span className="flex items-center gap-2 text-white"><Loader2 className="w-3.5 h-3.5 animate-spin" />{tr('qcb.testWaiting')}</span>}
+            {test === 'short' && <span className="flex items-center gap-2 text-amber-300">{tr('qcb.testShort')}</span>}
             {test === 'pad' && <span className="flex items-center gap-2 text-emerald-300 font-semibold"><CheckCircle2 className="w-4 h-4" />{tr('qcb.testPad')}</span>}
             {test === 'keys' && <span className="flex items-center gap-2 text-emerald-300"><CheckCircle2 className="w-4 h-4" />{tr('qcb.testKeys', { keys: caps.join(' + ') })}</span>}
           </div>
           <button
-            onClick={() => { onBlip?.(); setTest(test === 'waiting' ? 'idle' : 'waiting'); }}
+            onClick={() => { onBlip?.(); setTest(test === 'waiting' || test === 'short' ? 'idle' : 'waiting'); }}
             disabled={!api?.qcButtonTest}
             className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[var(--accent-color)] text-[#16101f] cursor-pointer disabled:opacity-40"
           >
-            {test === 'waiting' ? tr('qcb.testStop') : test === 'idle' ? tr('qcb.testStart') : tr('qcb.testAgain')}
+            {test === 'waiting' || test === 'short' ? tr('qcb.testStop') : test === 'idle' ? tr('qcb.testStart') : tr('qcb.testAgain')}
           </button>
         </div>
       )}

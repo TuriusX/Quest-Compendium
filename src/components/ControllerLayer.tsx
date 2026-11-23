@@ -38,6 +38,9 @@ type PadEvent =
   | { type: 'button'; button: Btn | 'lt' | 'rt'; src?: 'dpad' | 'stick'; repeat?: boolean }
   | { type: 'scroll'; dy: number }
   | { type: 'talk'; state: 'start' | 'end' }
+  // Hold B to go back to the game (owner, Nov 22 2026): 'start' once it's held a moment (the ring fills over ms),
+  // 'cancel' when let go too soon (then B's normal press follows), 'done' when the panel goes.
+  | { type: 'hold'; button: 'b'; state: 'start' | 'cancel' | 'done'; ms?: number }
   // Either stick's direction while pushed (x right, y up, -1..1), and x = y = 0 once let go: points in the quick menu.
   | { type: 'stick'; x: number; y: number; which?: 'left' | 'right' };
 
@@ -318,6 +321,8 @@ export function ControllerLayer({
   const t = useT();
   const locale = useLocale();
   const [padMode, setPadMode] = useState(false);
+  // Hold B: the ring around B, filling over ms (key restarts its animation).
+  const [exitHold, setExitHold] = useState<null | { ms: number; key: number }>(null);
   const [panel, setPanel] = useState<null | 'questions' | 'keyboard' | 'actions' | 'quick'>(null);
   const [qmIndex, setQmIndex] = useState(0);
   const ringPointer = useRef(createRingPointer());
@@ -704,6 +709,10 @@ export function ControllerLayer({
   const handle = useCallback(
     (e: PadEvent) => {
       if (!enabled) return;
+      if (e.type === 'hold') {
+        setExitHold(e.state === 'start' ? { ms: e.ms || 700, key: Date.now() } : null);
+        return;
+      }
       if (!padMode || staleRef.current) {
         // Into controller mode, or back after the panel was away: the focus starts fresh, on the Ask bar ("Open a tab
         // for X?" when it's showing), so a press never acts on a control the player can't see is selected. The press
@@ -1098,8 +1107,31 @@ export function ControllerLayer({
     </span>
   );
 
+  const ringC = 2 * Math.PI * 34;
+  const bG = glyph('b', style);
   return (
     <div data-qc-pad-ui className="fixed inset-x-0 bottom-0 z-[400] pointer-events-none flex flex-col items-center gap-2 p-3">
+      {exitHold && (
+        // Bottom of the panel, above the button hints (owner, Nov 22 2026: clearly visible, not front and center).
+        <div className="pointer-events-none flex items-center gap-3 rounded-full bg-[#0d0e15] border border-[var(--accent-border)] pl-1.5 pr-4 py-1.5 shadow-2xl" role="status" aria-live="polite">
+          <style>{`@keyframes qcHoldFill{from{stroke-dashoffset:${ringC}}to{stroke-dashoffset:0}}`}</style>
+          <div className="relative w-10 h-10 flex-shrink-0">
+            <svg viewBox="0 0 80 80" className="absolute inset-0 -rotate-90" aria-hidden="true">
+              <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="8" />
+              <circle
+                key={exitHold.key}
+                cx="40" cy="40" r="34" fill="none" stroke="var(--accent-color)" strokeWidth="8" strokeLinecap="round"
+                strokeDasharray={ringC}
+                style={{ strokeDashoffset: ringC, animation: `qcHoldFill ${exitHold.ms}ms linear forwards` }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="w-6 h-6 flex items-center justify-center text-xs font-bold" style={{ background: bG.bg, color: bG.fg, borderRadius: 999 }}>{bG.text}</span>
+            </div>
+          </div>
+          <div className="text-[13px] font-semibold text-white whitespace-nowrap">{t('pad.holdExit')}</div>
+        </div>
+      )}
       {panel === 'questions' && (
         <div className="pointer-events-auto w-full max-w-md rounded-2xl bg-[#0d0e15]/97 border border-[var(--accent-border)] shadow-2xl p-3 space-y-1.5" role="listbox" aria-label={t('pad.questions')}>
           <div className="px-1 pb-1 text-[10px] font-mono uppercase text-zinc-400">{t('pad.questions')}</div>
@@ -1127,6 +1159,7 @@ export function ControllerLayer({
               [['lb', 'rb'], 'pad.introPanels'],
               [['menu'], 'pad.introMenu'],
               [['b'], 'pad.introBack'],
+              ...(desktop ? [[['b'], 'pad.introHold'] as [string[], string]] : []),
             ] as [string[], string][]).map(([keys, label]) => (
               <div key={label} className="flex items-center gap-3 text-[13px] text-zinc-200">
                 <span className="flex items-center gap-1 w-20 flex-shrink-0">{keys.map((k) => <Glyph key={k} b={k} />)}</span>
@@ -1348,11 +1381,13 @@ export function ControllerLayer({
           <>
             <Hint b="a" label={t('pad.select')} />
             <Hint b="b" label={t('pad.back')} />
+            {desktop && <Hint b="b" label={t('pad.holdHint')} />}
           </>
         ) : (
           <>
             <Hint b="a" label={t('pad.select')} />
             <Hint b="b" label={t('pad.back')} />
+            {desktop && <Hint b="b" label={t('pad.holdHint')} />}
           </>
         )}
       </div>
