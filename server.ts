@@ -35,6 +35,7 @@ import { registerSpot } from './spot';
 import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor, gameForTab, baseGameKey } from './guidesApi';
+import { gameFromQuestion } from './gameFromQuestion';
 import { routing, takePlayerPro, PRO_CHAT_MODEL, openaiModelFor, openaiSiteModel } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL, QUICK_LOOKUP_RULE, VOICE_RULE, splitPerQuestion } from './searchPolicy';
 import { asksWhatNext } from './src/utils/whatNext';
@@ -1403,7 +1404,19 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       const tabGame = !activeGame?.name
         ? await gameForTab(typeof req.body?.tabName === 'string' ? req.body.tabName : '', typeof req.body?.guideKey === 'string' ? req.body.guideKey.slice(0, 120) : null).catch(() => null)
         : null;
-      const effectiveGame = activeGame?.name ? activeGame : tabGame ? { name: tabGame.name } : null;
+      // Still none (a general tab): the game the question or the conversation names (gameFromQuestion.ts), as its guide's
+      // name when there is one. Owner, Nov 23 2026: answer with the game worked out from the question.
+      let askedGame: string | null = null;
+      if (!activeGame?.name && !tabGame && String(question || '').trim()) {
+        askedGame = await withTimeout(
+          gameFromQuestion(getGeminiClient(), String(question), (Array.isArray(history) ? history : []).map((m: any) => (typeof m?.text === 'string' ? m.text : ''))),
+          4000,
+          'Game from question',
+        ).catch(() => null) as string | null;
+        if (askedGame) askedGame = (await gameForTab(askedGame, null).catch(() => null))?.name || askedGame;
+        if (askedGame) console.log(`[chat] game from the question: ${askedGame}`);
+      }
+      const effectiveGame = activeGame?.name ? activeGame : tabGame ? { name: tabGame.name } : askedGame ? { name: askedGame } : null;
       const isGameContextAvailable = !!effectiveGame;
       // Which guide this game is: the app's own pick (the guide it found), else the Steam app id, else the name, editions
       // aside (guidesApi.ts guideKeyFor). Every guide lookup below uses it, so "The Witcher 3: Wild Hunt — Remastered"
@@ -1825,6 +1838,10 @@ percentages:
         : await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
       const searchTools = searchOk && searchMode !== 'ask';
       systemInstruction += `\n\n${EXISTENCE_RULES}`;
+      // No game known even from the question (owner, Nov 23 2026): still answer, never just ask which game.
+      if (!effectiveGame && !site) {
+        systemInstruction += perQ(`\n\n[NO GAME SELECTED]\nThe player hasn't picked a game. Work out which game they mean from the question, the conversation and any screenshot, and answer for it, naming the game in one short clause ("In Elden Ring, ..."). If a few games fit, answer for the most likely one and add a one-line note that they can say if they meant another. Only when nothing at all points to a game (or the question isn't about one game), answer what can be answered and ask which game in one short line at the end.`);
+      }
       if (searchMode === 'force') systemInstruction += perQ(`\n\n${FORCE_RULES(effectiveGame!.name, release!.text)}`);
       if (!searchOk) {
         systemInstruction += perQ(`\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. If something is unfamiliar, say there isn't enough information about it yet and ask for a screenshot or a detail. Don't mention search limits to the player.`);
