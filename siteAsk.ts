@@ -39,6 +39,7 @@ import { playerSearchesToday, monthlyBudgetOk, countSearches, recordPlayerSearch
 import { clientIp } from './guestGuard';
 import { isLocalServer } from './testTraffic';
 import { registerAutoChanges } from './autoChanges';
+import { registerOwnerStatsPage } from './ownerStatsPage';
 import { GUIDE_REFERENCE, disputedOn, withoutDisputed, recheckLine, type GuideRef } from './guidesApi';
 import { visiblePart, nextPiece } from './answerStream';
 
@@ -664,4 +665,6 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
 
   // ---- /admin/asked: the log of the guides' nightly improvements, with undo (autoChanges.ts) ----
   registerAutoChanges(app, deps);
+  // ---- /admin/stats: the owner's stats page (ownerStatsPage.ts) ----
+  registerOwnerStatsPage(app, deps);
 }

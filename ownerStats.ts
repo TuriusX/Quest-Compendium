@@ -27,23 +27,23 @@ import { searchBillLine, searchMonth } from './searchGuard';
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 const DAY_TZ = 'America/Chicago';
-const dayOf = (t: number) => new Date(t).toLocaleDateString('en-CA', { timeZone: DAY_TZ });
+export const dayOf = (t: number) => new Date(t).toLocaleDateString('en-CA', { timeZone: DAY_TZ });
 export const playerHash = (uid: string) => crypto.createHash('sha256').update(`qc:${uid}`).digest('hex').slice(0, 12);
 /** The hourly bucket's id: the UTC hour ("2026-10-29T14"). */
 export const hourId = (t = Date.now()) => new Date(t).toISOString().slice(0, 13);
 const TEST_EMAIL = /(^|[.+_-])(e2e|test|tests|qa|sim)([.+_-]|\d|@)|@(example|test)\./i;
 const ownerEmails = () => (process.env.ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 
-type Who = { ownerHashes: Set<string>; testUids: Set<string> };
-async function whoToLeaveOut(): Promise<Who> {
+export type Who = { ownerHashes: Set<string>; testUids: Set<string> };
+export async function whoToLeaveOut(): Promise<Who> {
   const c: any = (await getFirestore().collection('config').doc('players').get()).data() || {};
   return { ownerHashes: new Set<string>(c.ownerHashes || []), testUids: new Set<string>(c.testUids || []) };
 }
-const isLeftOut = (u: UserRecord, w: Who) =>
+export const isLeftOut = (u: UserRecord, w: Who) =>
   ownerEmails().includes(String(u.email || '').toLowerCase()) || w.ownerHashes.has(playerHash(u.uid)) || w.testUids.has(u.uid) || TEST_EMAIL.test(String(u.email || ''));
 
 /** Real accounts that signed up on the website (users.signupSource "site"), with their creation times. */
-async function siteSignups(w: Who): Promise<number[]> {
+export async function siteSignups(w: Who): Promise<number[]> {
   const ids = (await getFirestore().collection('users').where('signupSource', 'in', ['site', 'homepage']).get()).docs.map((d) => d.id);
   const out: number[] = [];
   for (let i = 0; i < ids.length; i += 100) {
@@ -66,10 +66,10 @@ export async function realAccounts(w?: Who): Promise<number[]> {
   return out;
 }
 
-type Activity = { questions: number; players: number; guests: number; apps: Record<string, number>; approx: boolean; ids: Set<string> };
+export type Activity = { questions: number; players: number; guests: number; apps: Record<string, number>; approx: boolean; ids: Set<string> };
 
 /** Questions, players and platforms in [from, to): hourly counts, else (before they began) the daily ones. */
-async function activity(from: number, to: number, w: Who, owners: Set<string>): Promise<Activity> {
+export async function activity(from: number, to: number, w: Who, owners: Set<string>): Promise<Activity> {
   const db = getFirestore();
   const players = new Set<string>(), guests = new Set<string>(), apps: Record<string, number> = {};
   let questions = 0, approx = false;
@@ -105,7 +105,7 @@ async function activity(from: number, to: number, w: Who, owners: Set<string>): 
 }
 
 /** How many of `ids` were seen before `from` (in the daily counts): the window's returning players. */
-async function returningOf(ids: Set<string>, from: number): Promise<number> {
+export async function returningOf(ids: Set<string>, from: number): Promise<number> {
   if (!ids.size) return 0;
   const start = dayOf(from);
   const seen = new Set<string>();
@@ -118,7 +118,7 @@ async function returningOf(ids: Set<string>, from: number): Promise<number> {
 }
 
 /** The games asked about most in [from, to) (answerGames/{UTC day}: questions per game; your own included). */
-async function topGames(from: number, to: number, n = 5): Promise<{ name: string; q: number }[]> {
+export async function topGames(from: number, to: number, n = 5): Promise<{ name: string; q: number }[]> {
   const ids: string[] = [];
   for (let t = from; t < to + DAY; t += DAY) ids.push(new Date(t).toISOString().slice(0, 10));
   const docs = await Promise.all([...new Set(ids)].map((id) => getFirestore().collection('answerGames').doc(id).get()));
@@ -135,7 +135,7 @@ async function topGames(from: number, to: number, n = 5): Promise<{ name: string
  * Answer feedback in [from, to): thumbs up and down (answerFeedback; a signed-in vote is keyed by the player's hash, so
  * yours and test accounts' are left out) and reports (answerReports, with the ones still open).
  */
-async function feedbackIn(from: number, to: number, owners: Set<string>): Promise<{ up: number; down: number; reports: number; open: number }> {
+export async function feedbackIn(from: number, to: number, owners: Set<string>): Promise<{ up: number; down: number; reports: number; open: number }> {
   const db = getFirestore();
   const [fb, rep] = await Promise.all([
     db.collection('answerFeedback').where('at', '>=', from).get(),
@@ -179,7 +179,7 @@ export function answerCostLine(rows: { day: string; q: number; dollars: number; 
 }
 
 /** Locate me checks in [from, to) (locateMe.ts statsHours.loc): all, automatic, the ones that found the place, cost. */
-async function locates(from: number, to: number, owners: Set<string>): Promise<{ n: number; auto: number; found: number; dollars: number }> {
+export async function locates(from: number, to: number, owners: Set<string>): Promise<{ n: number; auto: number; found: number; dollars: number }> {
   const out = { n: 0, auto: 0, found: 0, dollars: 0 };
   const hours = (await getFirestore().collection('statsHours').where('at', '>=', from - HOUR + 1).get()).docs.map((d) => d.data() as any).filter((h) => h.at < to);
   for (const h of hours) {
@@ -194,7 +194,7 @@ async function locates(from: number, to: number, owners: Set<string>): Promise<{
   return out;
 }
 
-type LimitTally = Record<'free' | 'guest' | 'premium', { players: number; refused: number }>;
+export type LimitTally = Record<'free' | 'guest' | 'premium', { players: number; refused: number }>;
 /** Players who hit their daily question limit in [from, to), by tier, and how many questions were refused (statsHours.lh). */
 export function tallyLimits(hours: any[], owners: Set<string>): LimitTally {
   const by: Record<string, { players: Set<string>; refused: number }> = {};
@@ -212,13 +212,13 @@ export function limitLine(label: string, l: LimitTally): string {
   const part = (name: string, x: { players: number; refused: number }) => `${name} ${x.players} (${x.refused} refused)`;
   return `${label}: ${part('free', l.free)} · ${part('guests', l.guest)} · ${part('Premium', l.premium)}`;
 }
-async function limitsIn(from: number, to: number, owners: Set<string>): Promise<LimitTally> {
+export async function limitsIn(from: number, to: number, owners: Set<string>): Promise<LimitTally> {
   const hours = (await getFirestore().collection('statsHours').where('at', '>=', from - HOUR + 1).get()).docs.map((d) => d.data() as any).filter((h) => h.at < to);
   return tallyLimits(hours, owners);
 }
 
 /** Free trials: started, converted and cancelled in [from, to), and how many are in their trial now. */
-async function trialsIn(from: number, to: number): Promise<{ started: number; converted: number; cancelled: number; live: number }> {
+export async function trialsIn(from: number, to: number): Promise<{ started: number; converted: number; cancelled: number; live: number }> {
   const docs = (await getFirestore().collection('trials').get()).docs.map((d) => d.data() as any);
   const inWin = (t: any) => Number(t) >= from && Number(t) < to;
   return {
