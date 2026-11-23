@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/visualAnswers.test.ts)
 import assert from "node:assert/strict";
-import { shortCount, pickStart, topicKey, mapStore, visualFor, visualId, sameGameName, RULES_V } from "../visualAnswer";
+import { shortCount, pickStart, topicKey, mapStore, visualFor, visualId, sameGameName, RULES_V, linksInText, wherePictures } from "../visualAnswer";
 import { statKind, pacificDay, visualStatsLine, isStandInQuestion } from "../visualServer";
 
 let passed = 0;
@@ -129,6 +129,25 @@ await test("/stats: visuals by kind, cost per answer, plays and today's YouTube 
   assert.match(line, /Video 3 · our picture 1 · wiki picture 1 · nothing 5 · saved one reused 1/);
   assert.match(line, /Cost: \$0\.06 \(\$0\.0060 per answer\) · played 2 · pictures opened 1/);
   assert.match(line, /YouTube searches today: 37 of 100 · 2 answer\(s\) got no video/);
+});
+
+await test("web pages listed in a reply's text count, not only cited ones (owner, Nov 23 2026: the shovel search found 0 pages)", () => {
+  assert.deepEqual(linksInText("https://bg3.wiki/wiki/Shovel_%28familiar%29\n\nhttps://www.shacknews.com/article/136563/baldurs-gate-3-shovel."),
+    ["https://bg3.wiki/wiki/Shovel_%28familiar%29", "https://www.shacknews.com/article/136563/baldurs-gate-3-shovel"]);
+  assert.deepEqual(linksInText("no links here"), []);
+});
+
+await test("a where-question takes a guide page's location pictures, named or captioned ones first, never icons", () => {
+  const html = '<meta property="og:image" content="https://site.com/cover.jpg">' +
+    '<img src="https://site.com/author-avatar.jpg" width="80">' +
+    '<img src="https://site.com/random-scene.jpg" width="1200">' +
+    '<img data-src="https://site.com/bg3-shovel-location-map.jpg" alt="Shovel location on the map">' +
+    '<img src="https://site.com/tiny.jpg" width="120"><img src="https://site.com/ui-icon.png">';
+  const got = wherePictures(html, "Shovel", "https://site.com/page");
+  assert.equal(got[0], "https://site.com/bg3-shovel-location-map.jpg");
+  assert.equal(got[1], "https://site.com/cover.jpg");
+  assert.equal(got.length, 3);
+  assert.ok(!got.some((u) => /avatar|tiny|icon/.test(u)));
 });
 
 console.log(`\n${passed} passed`);

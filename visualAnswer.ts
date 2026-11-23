@@ -107,7 +107,11 @@ export async function choose(ai: Gen, cost: Cost, game: string, question: string
   // A screenshot with no one main thing in its answer: nothing.
   // "thing": a question about one named thing is a picture of it plus its wiki page (the page alone when no picture fits).
   const thing = j?.kind === 'thing';
-  const kind: VisualKind = ['video', 'picture', 'thing'].includes(j?.kind) && j?.confidence === 'high' && (!shotOnly || meant) ? (thing ? 'picture' : j.kind) : 'none';
+  // A picture or a thing's picture also on a medium-sure choice (owner, Nov 23 2026: "where can I find a shovel" got
+  // nothing on a medium choice): every picture must still pass the vision check, so a wrong choice shows nothing. A
+  // video stays high-only (the day's YouTube searches).
+  const sure = j?.confidence === 'high' || (j?.confidence === 'medium' && (j?.kind === 'picture' || thing));
+  const kind: VisualKind = ['video', 'picture', 'thing'].includes(j?.kind) && sure && (!shotOnly || meant) ? (thing ? 'picture' : j.kind) : 'none';
   return { kind, thing: thing && kind === 'picture', meant, game: String(j?.game || '').trim().slice(0, 120), subject: String(j?.subject || '').slice(0, 80), place: String(j?.place || '').slice(0, 80), search: String(j?.search || '').slice(0, 120), why: String(j?.why || '').slice(0, 200), confidence: String(j?.confidence || '') };
 }
 
@@ -402,30 +406,69 @@ export function rankPages(urls: string[], prefer: string[] = []): string[] {
   return urls.map((u, i) => ({ u, i, s: score(u) })).sort((a, b) => a.s - b.s || a.i - b.i).map((x) => x.u);
 }
 
-async function webTries(ai: Gen, cost: Cost, game: string, subject: string, steps: string[], prefer: string[] = []): Promise<{ url: string; page: string; title: string; site: string }[]> {
+/** Page addresses written in a reply's text (OpenAI's search often lists them without citing them, Nov 23 2026). */
+export function linksInText(text: string): string[] {
+  return [...new Set((String(text || '').match(/https?:\/\/[^\s<>"')\]]+/g) || []).map((u) => u.replace(/[.,;:]+$/, '')))];
+}
+
+/**
+ * A guide page's pictures that may show WHERE something is (owner, Nov 23 2026: "where can I find a shovel" got no
+ * picture while a Google search showed the spot): guide sites put the location screenshot or map inside the article,
+ * not as the page's cover picture. The article's pictures named or captioned after the thing or a map/location first,
+ * then the page's main picture; at most `n`, never icons, avatars or site furniture.
+ */
+export function wherePictures(html: string, subject: string, base: string, n = 3): string[] {
+  const abs = (u: string) => { try { return new URL(u.replace(/&amp;/g, '&'), base).toString(); } catch { return ''; } };
+  const words = subject.toLowerCase().replace(/^the\s+/, '').split(/[^a-z0-9]+/).filter((w) => w.length > 2 || /\d/.test(w));
+  const junk = /logo|avatar|author|favicon|sprite|badge|banner|placeholder|pixel|spacer|icon|emoji|gravatar|button|ads?[_/-]|\.svg(\?|$)|\.gif(\?|$)/i;
+  const seen = new Set<string>();
+  const found: { u: string; s: number; i: number }[] = [];
+  (html.match(/<img[^>]*>/g) || []).forEach((t, i) => {
+    const srcset = (t.match(/\s(?:data-srcset|srcset)="([^"]+)"/) || [])[1] || '';
+    const big = srcset.split(',').map((x) => x.trim().split(/\s+/)).filter((x) => x[0]).sort((a, b) => (parseInt(b[1]) || 0) - (parseInt(a[1]) || 0))[0]?.[0];
+    const u = abs((t.match(/\s(?:data-src|data-lazy-src|src)="(https?:[^"]+|\/[^"]+)"/) || [])[1] || big || '');
+    const w = Number((t.match(/\swidth="(\d+)"/) || [])[1] || 0);
+    if (!/^https:\/\//.test(u) || junk.test(u) || (w && w < 300) || seen.has(u)) return;
+    seen.add(u);
+    const said = `${(t.match(/\salt="([^"]*)"/) || [])[1] || ''} ${decodeURIComponent(u.split('?')[0].split('/').pop() || '')}`.toLowerCase();
+    const s = (words.length && words.every((x) => said.includes(x)) ? 2 : 0) + (/map|location|where|spot|found/.test(said) ? 1 : 0);
+    found.push({ u, s, i });
+  });
+  const og = abs((html.match(/<meta property="og:image" content="([^"]+)"/) || html.match(/<meta content="([^"]+)" property="og:image"/) || [])[1] || '');
+  const ranked = found.filter((x) => x.s > 0).sort((a, b) => b.s - a.s || a.i - b.i).map((x) => x.u);
+  return [...new Set([...ranked, ...(og && !junk.test(og) ? [og] : []), ...found.filter((x) => x.s === 0).map((x) => x.u)])].slice(0, n);
+}
+
+async function webTries(ai: Gen, cost: Cost, game: string, subject: string, steps: string[], prefer: string[] = [], where: { near?: string } | null = null): Promise<{ url: string; page: string; title: string; site: string }[]> {
   try {
+    const ask = where
+      ? `Find guide or wiki pages that show WHERE to find "${subject}" in the video game "${game}"${where.near ? ` (it is at or near ${where.near})` : ''}, with a screenshot or map of the spot. Reply with the pages' addresses only.`
+      : `Find web pages about "${subject}" in the video game "${game}" that show what it looks like in the game: its page on a wiki or fan wiki first, else an official site, press kit or guide page about it. Reply with the pages' addresses only.`;
     const res: any = await ai.models.generateContent({
       model: FAST,
-      contents: [{ role: 'user', parts: [{ text: `Find web pages about "${subject}" in the video game "${game}" that show what it looks like in the game: its page on a wiki or fan wiki first, else an official site, press kit or guide page about it. Reply with the pages' addresses only.` }] }],
+      contents: [{ role: 'user', parts: [{ text: ask }] }],
       config: { tools: [{ googleSearch: {} }], temperature: 0, maxOutputTokens: 2000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     const searches = (res?.candidates?.[0]?.groundingMetadata?.webSearchQueries || []).length;
     countUncounted(ai, res);
     cost.d += (estimateCost(FAST, res) || 0) + searches * SEARCH_DOLLARS;
     cost.log?.('visual-web', FAST, res);
-    const links = ((res?.candidates?.[0]?.groundingMetadata?.groundingChunks || []) as any[]).map((c) => String(c?.web?.uri || '')).filter(Boolean);
+    // The search's cited pages, and the addresses written in the reply (the question asks for addresses only, and
+    // OpenAI's search lists them without citations: every web picture search found 0 pages from Nov 19 to Nov 23 2026).
+    const cited = ((res?.candidates?.[0]?.groundingMetadata?.groundingChunks || []) as any[]).map((c) => String(c?.web?.uri || '')).filter(Boolean);
+    const links = [...new Set([...cited, ...linksInText(res?.text || '')])];
     const pages = rankPages([...new Set((await Promise.all(links.slice(0, 10).map(realUrl))).filter((u) => u && !/youtube\.com|youtu\.be|questcompendium/i.test(u)))], prefer).slice(0, 3);
     const out: { url: string; page: string; title: string; site: string }[] = [];
     for (const page of pages) {
       const r = await fetch(page, { headers: { 'User-Agent': UA }, redirect: 'follow', signal: AbortSignal.timeout(8000) }).catch(() => null);
       if (!r?.ok) continue;
       const html = await r.text().catch(() => '');
-      const url = pagePicture(html, subject, r.url || page);
       const title = ((html.match(/<meta property="og:title" content="([^"]+)"/) || html.match(/<title>([^<]+)<\/title>/) || [])[1] || subject)
         .replace(/&#0?39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim().slice(0, 120);
-      if (url) out.push({ url, page: r.url || page, title, site: siteOf(r.url || page) });
+      const urls = where ? wherePictures(html, subject, r.url || page) : [pagePicture(html, subject, r.url || page)].filter(Boolean);
+      for (const url of urls) out.push({ url, page: r.url || page, title, site: siteOf(r.url || page) });
     }
-    steps.push(`web: ${pages.length} page(s), ${out.length} picture(s) for "${subject}"`);
+    steps.push(`web: ${pages.length} page(s), ${out.length} picture(s) for "${subject}"${where ? ' (where)' : ''}`);
     return out;
   } catch (e: any) { steps.push(`web search failed: ${String(e?.message || e).slice(0, 80)}`); return []; }
 }
@@ -436,7 +479,7 @@ async function webTries(ai: Gen, cost: Cost, game: string, subject: string, step
  * 'only' (the web alone, for comparing the two routes). `src.prefer`: sites that gave this game good pictures before,
  * opened first among the web's pages.
  */
-export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: string; fandom?: string; more?: MoreWiki[]; prefer?: string[] }, game: string, question: string, subject: string, steps: string[], where = false, icon = false, web: boolean | 'only' = true) {
+export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: string; fandom?: string; more?: MoreWiki[]; prefer?: string[] }, game: string, question: string, subject: string, steps: string[], where = false, icon = false, web: boolean | 'only' = true, near = '') {
   const tries: { url: string; page: string; title: string; site: string }[] = [];
   if (web !== 'only') {
     if (src.fextralife) { const f = await fextralifeImage(src.fextralife, subject).catch(() => null); if (f) tries.push({ ...f, site: 'Fextralife' }); }
@@ -448,10 +491,12 @@ export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: strin
   }
   // No wiki picture passed (or the web alone): the web, under the same check.
   const seen = new Set(tries.map((t) => t.url));
-  return checkTries((await webTries(ai, cost, game, subject, steps, src.prefer || [])).filter((t) => !seen.has(t.url)));
+  return checkTries((await webTries(ai, cost, game, subject, steps, src.prefer || [], where ? { near: near && near !== subject ? near : '' } : null)).filter((t) => !seen.has(t.url)));
 
   async function checkTries(list: typeof tries) {
-  for (const t of list) {
+  // At most 7 looks (a where-question's guide pages give up to 3 pictures each; a look is about 0.01 cents).
+  let best: any = null;
+  for (const t of list.slice(0, 7)) {
     // A named thing's picture is often the wiki's item icon (150px on BG3's wiki, 76-85px on Hollow Knight's): a clear
     // small icon beats no picture (owner, Nov 16 2026), so icons count from 64px.
     const jpeg = await jpegOf(t.url, icon ? 64 : 200);
@@ -468,18 +513,23 @@ export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: strin
     const j = await ask(ai, cost, [{ inlineData: { mimeType: 'image/jpeg', data: jpeg } }, { text: prompt }], 200, 'visual-picture');
     steps.push(`check ${t.site}: ${j?.ok ? 'yes' : 'no'} (${j?.confidence || '?'}) ${j?.what || ''}`);
     if (j?.ok === true && j?.confidence === 'high') {
-      return { kind: 'picture' as const, source: 'wiki' as const, url: t.url, alt: String(j.what || subject), credit: `${t.site}: ${t.title}`, link: t.page, page: { url: t.page, title: t.title, site: t.site }, why: String(j.what || ''), ...(/map/i.test(String(j.what || '')) ? { map: true } : {}) };
+      const pic = { kind: 'picture' as const, source: 'wiki' as const, url: t.url, alt: String(j.what || subject), credit: `${t.site}: ${t.title}`, link: t.page, page: { url: t.page, title: t.title, site: t.site }, why: String(j.what || ''), ...(/map/i.test(String(j.what || '')) ? { map: true } : {}) };
+      // A where-question: a map marking the spot beats a close-up of the spot, so the rest are looked at for one (the
+      // first good picture is kept when none is a map).
+      if (!where || pic.map) return pic;
+      best ||= pic;
     }
   }
-  return null;
+  return best;
   }
 }
 
 // ---- The whole step -----------------------------------------------------------------------------------------------
 
 /** The rules' version in saved results' keys (2: Nov 14 2026, "how do I get X" questlines and the question's own game;
- * 3: questions about a named thing get its picture and wiki page). */
-export const RULES_V = 'r3';
+ * 3: questions about a named thing get its picture and wiki page; 4: Nov 23 2026, where-questions find guide pages'
+ * location pictures, so a week-old "nothing found" is looked for again). */
+export const RULES_V = 'r4';
 /** Two names for the same game ("ELDEN RING" / "Elden Ring", "The Witcher 3: Wild Hunt" / "Witcher 3")? */
 export function sameGameName(a: string, b: string): boolean {
   const n = (s: string) => s.toLowerCase().replace(/[™®©]/g, '').replace(/\b(the|game of the year|goty|complete|definitive|remastered|special|enhanced|edition)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -545,7 +595,7 @@ export async function visualFor(ai: Gen, o: {
     else {
       // Pictures come from the game's wikis only, checked (owner, Nov 14 2026: not from our own guides, whose pictures
       // aren't good enough for this): the thing itself first, then for a where-question the place it's in.
-      for (const name of (c.thing ? [c.subject] : [c.subject, c.place]).filter(Boolean)) if (!visual) visual = await wikiPicture(ai, cost, wiki, game, question, name, out.steps, !c.thing && !!c.place, c.thing);
+      for (const name of (c.thing ? [c.subject] : [c.subject, c.place]).filter(Boolean)) if (!visual) visual = await wikiPicture(ai, cost, wiki, game, question, name, out.steps, !c.thing && (!!c.place || /where|find|locat/i.test(question)), c.thing, true, c.place);
       if (visual && excluded.has(visualId(visual))) { out.steps.push('the picture found was marked "Not right" before'); visual = null; }
       // A question about one named thing (owner, Nov 14 2026): its wiki page goes with the picture, and shows alone when
       // no picture was good enough.
