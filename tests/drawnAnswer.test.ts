@@ -3,7 +3,7 @@
 // check, with a fake model (no AI calls, no cost).
 import assert from "node:assert/strict";
 import sharp from "sharp";
-import { compare, drawnFor, STROKES_MAX, ALTERED_MAX, type DrawnBudget, type DrawnStore } from "../drawnAnswer";
+import { compare, drawnFor, STROKES_MAX, ALTERED_MAX, type DrawnBudget, type DrawnStore, alreadyMarked } from "../drawnAnswer";
 
 // A plain "screenshot": a grey-green gradient.
 const W = 320, H = 180;
@@ -178,4 +178,14 @@ console.log("drawnAnswer: skip check ok");
   assert.deepEqual(cleanPins({ join: [2, 2, 1], areas: [] }, 3), { order: [1, 0], labels: {}, areas: [] });
   assert.equal(cleanPins({ join: [1, 2] }, 0), null, "no markers");
   console.log("drawnAnswer: pins ok");
+}
+
+// 9. A wiki picture that already marks the answer's spot is shown as found (no drawing); medium confidence or a plain map isn't.
+{
+  const mk = (reply: any) => ({ models: { async generateContent() { return { usageMetadata: { promptTokenCount: 1000, candidatesTokenCount: 50 }, text: JSON.stringify(reply) }; } } });
+  const cost = { d: 0 };
+  assert.equal((await alreadyMarked(mk({ alreadyMarked: true, confidence: "high", what: "map with the chest circled" }) as any, cost, "G", "Where?", "Here.", orig)).marked, true);
+  assert.equal((await alreadyMarked(mk({ alreadyMarked: true, confidence: "medium" }) as any, cost, "G", "Where?", "Here.", orig)).marked, false);
+  assert.equal((await alreadyMarked(mk({ alreadyMarked: false, confidence: "high" }) as any, cost, "G", "Where?", "Here.", orig)).marked, false);
+  assert.ok(cost.d > 0);
 }

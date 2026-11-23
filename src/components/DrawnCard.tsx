@@ -8,7 +8,7 @@ import { ExternalLink, X, Maximize2, ThumbsDown, PenLine, Sparkles } from 'lucid
 import { useT } from '../i18n';
 import type { WikiPage } from './VisualCard';
 
-export type DrawnData = { kind: 'drawn'; url: string; on: 'screen' | 'wiki' | 'illustration'; alt: string; page?: WikiPage };
+export type DrawnData = { kind: 'drawn'; url: string; on: 'screen' | 'wiki' | 'illustration'; alt: string; page?: WikiPage; found?: boolean };
 
 export function DrawnCard({ drawn, compact, onWrong }: { drawn: DrawnData; compact?: boolean; onWrong?: () => void }) {
   const t = useT();
@@ -17,7 +17,7 @@ export function DrawnCard({ drawn, compact, onWrong }: { drawn: DrawnData; compa
   const shell = 'mt-3 w-full max-w-[640px] rounded-xl border border-white/[0.12] bg-[#14151e] overflow-hidden';
   if (wrong) return <div className={`${shell} px-3 py-2 text-[12px] text-zinc-400`}>{t('drawn.thanks')}</div>;
   const illus = drawn.on === 'illustration';
-  const label = illus ? t('drawn.illustration') : drawn.on === 'wiki' ? t('drawn.onWiki', { site: drawn.page?.site || 'wiki' }) : t('drawn.onScreen');
+  const label = illus ? t('drawn.illustration') : drawn.found ? t('visual.map') : drawn.on === 'wiki' ? t('drawn.onWiki', { site: drawn.page?.site || 'wiki' }) : t('drawn.onScreen');
   return (
     <div className={shell} data-qc-drawn={drawn.on}>
       <button type="button" onClick={() => setBig(true)} className="group relative block w-full bg-[#0c0d13]" aria-label={t('visual.larger')}>

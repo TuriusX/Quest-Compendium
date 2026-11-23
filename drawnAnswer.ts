@@ -51,6 +51,11 @@ export type Drawn = {
    * app while the screen stays the same (drawn answers step 2, Nov 18 2026). Never saved; the app doesn't keep it.
    */
   layer?: string;
+  /**
+   * A wiki picture that already marks what the answer means (owner, Nov 22 2026: a map with the spot highlighted got
+   * arrows drawn on top for 8 cents): shown as found, nothing drawn. The apps label it as the site's map, not "Drawn on".
+   */
+  found?: boolean;
 };
 export type DrawnResult = { drawn: Drawn | null; cost: number; ms: number; steps: string[]; cached?: boolean; decided: DrawnOn | 'none'; failed?: string; pins?: Pins | null };
 
@@ -314,6 +319,22 @@ export async function checkDrawing(ai: Gen, cost: Cost, game: string, question: 
   return { ok, why: ok ? '' : `check: ${['sameScene', 'clear', 'agrees'].filter((k) => j?.[k] !== true).join(', ') || 'no reply'}`, what: String(j?.what || '').slice(0, 160) };
 }
 
+/**
+ * A wiki picture that already shows the answer: the spot or route the answer means is marked on it (highlighted,
+ * circled, pinned, arrowed or labelled in the right place). One cheap look (Flash, a fraction of a cent) before the
+ * drawing (8-10 cents) is paid for.
+ */
+export async function alreadyMarked(ai: Gen, cost: Cost, game: string, question: string, answer: string, pic: Buffer): Promise<{ marked: boolean; what: string }> {
+  const small = await sharp(pic).resize({ width: 768, withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
+  const j = await look(ai, cost, [jpegPart(small), { text:
+    `This picture is from a wiki for the video game "${game}". A player asked "${question}". The answer: """${answer.slice(0, 1500)}"""\n` +
+    'Does the picture ALREADY mark what the answer points the player to, so drawing on it would add nothing? Marked means the ' +
+    'spot, item or route the answer means is highlighted, circled, pinned, arrowed or labelled on the picture, in the right ' +
+    'place. A plain map of the area with nothing marked is not marked; a mark on something else is not marked.\n' +
+    'Reply with JSON only: {"alreadyMarked": true | false, "confidence": "high" | "medium" | "low", "what": "what the picture shows and marks, one short sentence"}' }], 'drawn-marked', 120);
+  return { marked: j?.alreadyMarked === true && j?.confidence === 'high', what: String(j?.what || '').slice(0, 160) };
+}
+
 // ---- The whole step -----------------------------------------------------------------------------------------------
 
 export type DrawnStore = {
@@ -375,6 +396,15 @@ export async function drawnFor(ai: Gen, o: {
     if (pic?.kind === 'picture') base = await fetchPicture(pic.url);
     if (!base) { steps.push('no wiki picture to draw on'); return done(null, { failed: 'no picture' }); }
     page = pic!.page; kind = pic!.map ? 'map' : 'picture';
+    // The picture already marks the place: shown as found (credited and linked), no drawing paid for.
+    const m = await alreadyMarked(ai, cost, o.game, o.question, o.answer, base).catch(() => ({ marked: false, what: '' }));
+    if (m.marked) {
+      steps.push(`already marked, shown as found: ${m.what}`);
+      const jpg = await sharp(base).resize({ width: 1280, withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
+      const found: Drawn = { kind: 'drawn', url: `data:image/jpeg;base64,${jpg.toString('base64')}`, on: 'wiki', alt: m.what || d.place, found: true, ...(page ? { page } : {}) };
+      if (keys.length && o.store) await o.store.set(keys, found).catch(() => {});
+      return done(found);
+    }
   }
 
   if (!(await o.budget.reserve(DRAW_RESERVE))) { steps.push("today's drawing money is used up"); return done(null, { failed: 'cap' }); }

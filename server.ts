@@ -30,6 +30,7 @@ import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe
 import { registerWorthRoutes, areaRef as worthAreaRef, worthTicket, topUpFromAnswer, ASKS_WHATS_WORTH } from './worthOnDemand';
 import { answerSourceLinks, groundingLinks } from './sourceLinks';
 import { answerFactsOn, factsForQuestion, tallyFacts } from './answerFacts';
+import { learnFromAnswer, shouldLearn } from './answerLearn';
 import { registerSpot } from './spot';
 import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
@@ -2442,19 +2443,30 @@ percentages:
         if (reason) recordGroundingMiss({ uid: userId, key: gk, page: guidePage?.slug, qtype, reason });
       })();
       if (!site) recordDailyActivity(userId, isGuest, req.headers['user-agent'], String(req.headers['x-qc-app'] || ''), cleanTag(req.headers['x-qc-from'])); // daily questions, players vs guests, which app, and where the player came from
+      // The confirmed place only counts while the player is still there: if this answer is about a different place,
+      // the player has moved on, and facts go under the new place only if something on screen settled it.
+      const factsPlace = (() => {
+        const a = (place?.name || '').toLowerCase(), b = (placeParsed.place?.name || '').toLowerCase();
+        const same = !b || a === b || a.startsWith(`${b},`) || b.startsWith(`${a},`);
+        if (place?.confirmed && same) return place.name;
+        return placeParsed.place?.sure ? placeParsed.place.name : undefined;
+      })();
+      const factsStory = story?.confirmed ? story.text : placeParsed.place?.storySure ? placeParsed.place.story : undefined;
       const factsSaved = site ? false : saveGameFacts(effectiveGame?.name, factsBackedBySearch(factsParsed.facts, groundedSeen), {
-        searched: searchesUsed > 0,
-        // The confirmed place only counts while the player is still there: if this answer is about a different place,
-        // the player has moved on, and facts go under the new place only if something on screen settled it.
-        place: (() => {
-          const a = (place?.name || '').toLowerCase(), b = (placeParsed.place?.name || '').toLowerCase();
-          const same = !b || a === b || a.startsWith(`${b},`) || b.startsWith(`${a},`);
-          if (place?.confirmed && same) return place.name;
-          return placeParsed.place?.sure ? placeParsed.place.name : undefined;
-        })(),
-        story: story?.confirmed ? story.text : placeParsed.place?.storySure ? placeParsed.place.story : undefined,
-        sources: searchSourcesSeen,
+        searched: searchesUsed > 0, place: factsPlace, story: factsStory, sources: searchSourcesSeen,
       });
+      // Answers grow the knowledge base (answerLearn.ts, owner Nov 22 2026): a searched answer that reported no facts
+      // itself gets one cheap look at its search-backed parts, so the next player's question needn't search again.
+      // The website's answers too (their searches cost the same). Off with LEARN_FROM_ANSWERS=0.
+      if (process.env.LEARN_FROM_ANSWERS !== '0' && effectiveGame?.name && shouldLearn({ searched: searchesUsed, grounded: groundedSeen, reported: factsParsed.facts })) {
+        const learnGame = effectiveGame.name, learnGrounded = [...groundedSeen], learnSources = [...searchSourcesSeen];
+        void learnFromAnswer(getGeminiClient(), { game: learnGame, grounded: learnGrounded })
+          .then((facts) => {
+            const n = facts.length ? saveGameFacts(learnGame, facts, { searched: true, place: factsPlace, story: factsStory, sources: learnSources }) : 0;
+            console.log(`[learn] ${learnGame} | ${n} fact(s) saved${facts.length ? `: ${facts.map((f) => f.subject).join(', ').slice(0, 200)}` : ''}`);
+          })
+          .catch((e) => console.warn('[learn] failed:', String(e?.message || e).slice(0, 160)));
+      }
 
       let bannerImageUrl: string | undefined;
       if (bannerImagePromise) {

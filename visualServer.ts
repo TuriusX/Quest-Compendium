@@ -218,7 +218,7 @@ export async function answerDrawn(deps: Pick<VisualDeps, 'getGeminiClient' | 'lo
   const client = String(o.client || 'web').replace(/[^a-z]/g, '').slice(0, 8) || 'web';
   console.log(`[drawn] ${client} | ${o.game} | "${o.question.replace(/\s+/g, ' ').slice(0, 80)}" | ${r.decided}${r.drawn ? ' -> shown' : r.failed ? ` -> failed (${r.failed})` : ''}${r.cached ? ' (saved)' : ''} | $${r.cost.toFixed(4)} ${(r.ms / 1000).toFixed(1)}s | ${r.steps.join(' / ').replace(/\s+/g, ' ').slice(0, 900)}`);
   void countVisual({
-    drawnLooked: 1, ...(r.decided !== 'none' ? { [`drawnWanted_${r.decided}`]: 1 } : {}), ...(r.drawn ? { [`drawn_${r.drawn.on}`]: 1 } : {}),
+    drawnLooked: 1, ...(r.decided !== 'none' ? { [`drawnWanted_${r.decided}`]: 1 } : {}), ...(r.drawn ? { [r.drawn.found ? 'drawnFound' : `drawn_${r.drawn.on}`]: 1 } : {}),
     ...(r.failed ? { [`drawnFailed_${r.failed.replace(/[^a-z]/g, '')}`]: 1 } : {}), drawnCached: r.cached ? 1 : 0, drawnCost: Math.round(r.cost * 1e6) / 1e6,
     ...(r.pins ? { drawnPins: 1 } : {}),
   }).catch(() => {});
@@ -385,7 +385,7 @@ export function visualStatsLine(s: { days: Record<string, any>[]; searchesToday:
     `Cost: $${cost.toFixed(2)}${answers ? ` ($${(cost / answers).toFixed(4)} per answer)` : ''} · played ${sum('played')} · pictures opened ${sum('opened')} · "Not right" ${sum('wrong')}${sum('dropped') ? ` (${sum('dropped')} dropped and found again)` : ''}`,
     `YouTube searches today: ${s.searchesToday} of ${s.searchLimit}${sum('quotaOut') ? ` · ${sum('quotaOut')} answer(s) got no video because the day's searches were used up` : ''}`,
     ...(sum('drawnLooked') ? [
-      `Drawn pictures: ${sum('drawn_screen') + sum('drawn_wiki') + sum('drawn_illustration')} shown of ${sum('drawnLooked')} answers looked at (on their screen ${sum('drawn_screen')} · on a wiki picture ${sum('drawn_wiki')} · illustration ${sum('drawn_illustration')} · saved one reused ${sum('drawnCached')})` +
+      `Drawn pictures: ${sum('drawn_screen') + sum('drawn_wiki') + sum('drawn_illustration')} shown of ${sum('drawnLooked')} answers looked at (on their screen ${sum('drawn_screen')} · on a wiki picture ${sum('drawn_wiki')} · illustration ${sum('drawn_illustration')}${sum('drawnFound') ? ` · map already marked, shown without drawing ${sum('drawnFound')}` : ''} · saved one reused ${sum('drawnCached')})` +
         ` · failed checks ${sum('drawnFailed_scenechanged') + sum('drawnFailed_check') + sum('drawnFailed_nothingdrawn')} · day's cap reached ${sum('drawnFailed_cap')} · cost $${sum('drawnCost').toFixed(2)}${sum('drawnWrong') ? ` · "Not right" ${sum('drawnWrong')}` : ''}${sum('drawnPins') ? ` · markers joined or ringed ${sum('drawnPins')}` : ''}`,
     ] : []),
   ].join('\n');

@@ -1204,7 +1204,7 @@ export default function App() {
     const picture =
       dr ? {
         url: dr.url, wide: true,
-        credit: dr.on === 'illustration' ? tr('drawn.illustrationNote') : dr.on === 'wiki' ? tr('drawn.onWiki', { site: dr.page?.site || 'wiki' }) : tr('drawn.onScreen'),
+        credit: dr.on === 'illustration' ? tr('drawn.illustrationNote') : dr.found ? `${tr('visual.map')} · ${dr.page?.site || 'wiki'}` : dr.on === 'wiki' ? tr('drawn.onWiki', { site: dr.page?.site || 'wiki' }) : tr('drawn.onScreen'),
         ...(dr.on === 'illustration' ? { tag: tr('drawn.illustration') } : {}),
       }
         : v?.kind === 'picture' && v.source !== 'ours' ? { url: v.url, credit: v.credit || v.page?.site || '' }
@@ -2342,7 +2342,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       const d = body?.drawn;
       if (d && d.kind === 'drawn' && typeof d.url === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(d.url) && ['screen', 'wiki', 'illustration'].includes(d.on)) {
         const page = d.page && /^https:\/\//.test(String(d.page.url || '')) ? { url: String(d.page.url), title: String(d.page.title || '').slice(0, 120), site: String(d.page.site || '').slice(0, 60) } : undefined;
-        updateMessageById(msgId, (m) => ({ ...m, drawn: { kind: 'drawn', url: d.url, on: d.on, alt: String(d.alt || '').slice(0, 200), ...(page ? { page } : {}) } }));
+        updateMessageById(msgId, (m) => ({ ...m, drawn: { kind: 'drawn', url: d.url, on: d.on, alt: String(d.alt || '').slice(0, 200), ...(page ? { page } : {}), ...(d.found === true ? { found: true } : {}) } }));
         // Step 2 (desktop): drawn on a screen that holds still (a map, a menu): the strokes over the live game while that
         // screen stays the same. Not kept in the conversation.
         const api = (window as any).electronAPI;
