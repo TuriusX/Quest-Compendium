@@ -79,6 +79,9 @@ export async function choose(ai: Gen, cost: Cost, game: string, question: string
       'the answer happens to describe.\n';
   const prompt =
     head +
+    // Owner, Nov 23 2026: for GTA VI the reason given was "an unreleased/fictional scenario".
+    `(Today is ${new Date().toISOString().slice(0, 10)}. The game may be newer than what you know: it is out and real, so ` +
+    'never decide from it being unknown to you.)\n' +
     '- "video": the player asks HOW TO DO something that is movement or timing: getting from one place to another, ' +
     'beating a boss or enemy, getting through a platforming section, solving a puzzle ("how do I solve / get to / get ' +
     'through / beat ..."). A puzzle is always a video, never a picture.\n' +

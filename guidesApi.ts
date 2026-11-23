@@ -127,6 +127,20 @@ export async function guideKeyFor(game: string | undefined, appId?: number, alt?
   return pickGuideKey(await guideIndex(), [game, alt], appId, hint);
 }
 
+/**
+ * The game a tab is for when no game is running (the website, or the desktop with the game closed): the tab's name or
+ * the guide the app found, only when it matches a published guide, so a tab named "New Compendium" stays without a game
+ * (owner, Nov 23 2026: a GTA VI tab on the website was answered "I don't know which game you're asking about").
+ */
+export async function gameForTab(tabName?: string | null, hint?: string | null): Promise<{ key: string; name: string } | null> {
+  const name = String(tabName || '').trim().slice(0, 120);
+  if (!name && !hint) return null;
+  const key = pickGuideKey(await guideIndex(), [name], 0, hint);
+  if (!key) return null;
+  const g = (await guideList()).find((x) => x.key === key);
+  return g ? { key, name: g.game } : null;
+}
+
 async function gameAreas(key: string) {
   return cached(`game:${key}`, async () => {
     await igdbOn();

@@ -34,7 +34,7 @@ import { learnFromAnswer, shouldLearn } from './answerLearn';
 import { registerSpot } from './spot';
 import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
-import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor, baseGameKey } from './guidesApi';
+import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor, gameForTab, baseGameKey } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL, openaiModelFor, openaiSiteModel } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL, QUICK_LOOKUP_RULE, VOICE_RULE, splitPerQuestion } from './searchPolicy';
 import { asksWhatNext } from './src/utils/whatNext';
@@ -1398,7 +1398,12 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       const promptSplit = !site && (process.env.QC_PROMPT_SPLIT === '1' || (await routing()).promptSplit === true);
       const perQ = (s: string) => `\u0001${s}\u0002`;
       // Check if a game is detected either by local process detection, tab selection, or inquiry text
-      const effectiveGame = activeGame || null;
+      // No running game (the website, or the desktop with the game closed): the tab's game, when its name or its guide
+      // matches a published guide (guidesApi.ts gameForTab).
+      const tabGame = !activeGame?.name
+        ? await gameForTab(typeof req.body?.tabName === 'string' ? req.body.tabName : '', typeof req.body?.guideKey === 'string' ? req.body.guideKey.slice(0, 120) : null).catch(() => null)
+        : null;
+      const effectiveGame = activeGame?.name ? activeGame : tabGame ? { name: tabGame.name } : null;
       const isGameContextAvailable = !!effectiveGame;
       // Which guide this game is: the app's own pick (the guide it found), else the Steam app id, else the name, editions
       // aside (guidesApi.ts guideKeyFor). Every guide lookup below uses it, so "The Witcher 3: Wild Hunt — Remastered"
@@ -1523,8 +1528,8 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         situationalContext += `\n[CONFIRMED ACTIVE GAME RUNNING LOCALLY: ${activeGame.name} (AppID: ${activeGame.appId || 'Custom'})]\n`;
         if (activeGame.genre) situationalContext += `[Genre: ${activeGame.genre}]\n`;
         if (activeGame.developer) situationalContext += `[Developer: ${activeGame.developer}]\n`;
-      } else if (activeGame) {
-        situationalContext += `\n[Selected Compendium Reference: ${activeGame.name} (Note: No game is currently running locally on the user's PC)]\n`;
+      } else if (effectiveGame) {
+        situationalContext += `\n[Selected Compendium Reference: ${effectiveGame.name} (Note: No game is currently running locally on the user's PC)]\n`;
       } else {
         situationalContext += `\n[System Status: No active video game is running locally on the player's system]\n`;
       }
