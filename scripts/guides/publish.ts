@@ -2961,7 +2961,7 @@ function missionStep(e: any, byslug: Map<string, GuideArea>): { w: any; ch: Guid
  */
 function gameplayHeading(x: { heading: string; text: string }, person: boolean): string {
   if (!person || !/^how to (reach|get to) (it|there)$/i.test(String(x.heading).trim())) return x.heading;
-  return /grave|tomb|buried|burial/i.test(x.text) ? 'Grave location' : 'Where to find them';
+  return /\bgrave|tomb|buried|burial\b/i.test(x.text) ? 'Grave location' : 'Where to find them';
 }
 
 function renderEntities(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, sitemap: string[]) {

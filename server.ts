@@ -528,7 +528,7 @@ async function startServer() {
     // Visual answers under the box's answers (Nov 14 2026; visualServer.ts), when VISUAL_ANSWERS=1.
     visual: {
       on: () => visualAnswersOn(),
-      find: (o) => answerVisual({ getGeminiClient: getHelperClient as any, log: (label, model, res) => logUsage(label, model, res), guideKeyFor: (game) => guideKeyFor(game) }, o),
+      find: (o) => answerVisual({ getGeminiClient: getGeminiClient as any, log: (label, model, res) => logUsage(label, model, res), guideKeyFor: (game) => guideKeyFor(game) }, o),
       event: (type, ref) => visualEvent(type, ref, 2),
     },
     // A signed-in player on the website: who they are and whether they're Premium (the guide's own allowance, siteAsk.ts;
@@ -608,7 +608,10 @@ async function startServer() {
   // Markers v2: find the marked things on the screen as it is when the answer arrives (desktop).
   registerRefind(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed, onChecked: (game, checked, kept, details) => void recordMarkerCheck(game, checked, kept, details), findAgainAllowed: () => takeFindAgain() });
   // Visual answers (owner, Nov 14 2026): one video or picture under an answer, after it arrives. Off unless VISUAL_ANSWERS=1.
-  registerVisualAnswers(app, { requireAuth, getGeminiClient: getHelperClient as any, log: (label, model, res) => logUsage(label, model, res), guideKeyFor: (game) => guideKeyFor(game) });
+  // On Gemini, not the OpenAI helpers (owner, Nov 23 2026: "make sure visual answers are still working well"): on
+  // screenshot and voice questions gpt-6-luna was only medium-sure and dropped 5 of 9 that needed a video or picture,
+  // Gemini 3.8 Flash none (answers with a visual fell from about half to under a tenth after Nov 19).
+  registerVisualAnswers(app, { requireAuth, getGeminiClient: getGeminiClient as any, log: (label, model, res) => logUsage(label, model, res), guideKeyFor: (game) => guideKeyFor(game) });
 
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {

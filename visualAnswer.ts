@@ -468,7 +468,7 @@ async function webTries(ai: Gen, cost: Cost, game: string, subject: string, step
       const urls = where ? wherePictures(html, subject, r.url || page) : [pagePicture(html, subject, r.url || page)].filter(Boolean);
       for (const url of urls) out.push({ url, page: r.url || page, title, site: siteOf(r.url || page) });
     }
-    steps.push(`web: ${pages.length} page(s), ${out.length} picture(s) for "${subject}"${where ? ' (where)' : ''}`);
+    steps.push(`web: ${pages.length} page(s), ${out.length} picture(s) for "${subject}"${where ? ' (where)' : ''}${pages.length ? ` [${pages.map(siteOf).join(', ')}]` : ''}`);
     return out;
   } catch (e: any) { steps.push(`web search failed: ${String(e?.message || e).slice(0, 80)}`); return []; }
 }
@@ -481,21 +481,26 @@ async function webTries(ai: Gen, cost: Cost, game: string, subject: string, step
  */
 export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: string; fandom?: string; more?: MoreWiki[]; prefer?: string[] }, game: string, question: string, subject: string, steps: string[], where = false, icon = false, web: boolean | 'only' = true, near = '') {
   const tries: { url: string; page: string; title: string; site: string }[] = [];
+  let wikiFound: { pic: any; rank: number } | null = null;
   if (web !== 'only') {
     if (src.fextralife) { const f = await fextralifeImage(src.fextralife, subject).catch(() => null); if (f) tries.push({ ...f, site: 'Fextralife' }); }
     if (src.fandom) { const f = await fandomImage(src.fandom, subject); if (f) tries.push({ ...f, site: 'Fandom' }); }
     for (const w of src.more || []) { const f = await mediaWikiImage(w, subject); if (f) tries.push({ ...f, site: w.site }); }
     steps.push(`wiki: ${tries.length} page picture(s) for "${subject}"`);
     const found = await checkTries(tries);
-    if (found || !web) return found;
+    // A where-question whose wiki picture is only the thing itself (an inventory icon): the web is looked at for its
+    // spot or a map (owner, Nov 23 2026), the icon kept when the web has nothing better.
+    if (!web || (found && (!where || found.rank >= 2))) return found?.pic || null;
+    if (found) wikiFound = found;
   }
   // No wiki picture passed (or the web alone): the web, under the same check.
   const seen = new Set(tries.map((t) => t.url));
-  return checkTries((await webTries(ai, cost, game, subject, steps, src.prefer || [], where ? { near: near && near !== subject ? near : '' } : null)).filter((t) => !seen.has(t.url)));
+  const onWeb = await checkTries((await webTries(ai, cost, game, subject, steps, src.prefer || [], where ? { near: near && near !== subject ? near : '' } : null)).filter((t) => !seen.has(t.url)));
+  return (onWeb && (!wikiFound || onWeb.rank > wikiFound.rank) ? onWeb : wikiFound)?.pic || null;
 
-  async function checkTries(list: typeof tries) {
+  async function checkTries(list: typeof tries): Promise<{ pic: any; rank: number } | null> {
   // At most 7 looks (a where-question's guide pages give up to 3 pictures each; a look is about 0.01 cents).
-  let best: any = null;
+  let best: { pic: any; rank: number } | null = null;
   for (const t of list.slice(0, 7)) {
     // A named thing's picture is often the wiki's item icon (150px on BG3's wiki, 76-85px on Hollow Knight's): a clear
     // small icon beats no picture (owner, Nov 16 2026), so icons count from 64px.
@@ -506,18 +511,21 @@ export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: strin
       (where
         ? `They asked WHERE it is. Does it clearly show where "${subject}" is (an in-game map marking its spot, or the ` +
           'spot itself in the game), or "' + subject + '" itself as it looks in the game? Not a logo, concept sketch, ' +
-          'collage, real-world photo or a different thing. Reply with JSON only: '
+          'collage, real-world photo or a different thing. Reply with JSON only (with "shows": "map" for a map marking ' +
+          'its spot, "spot" for the place in the game where it is, "item" for only the thing itself, like an icon): '
         : `Does it clearly show "${subject}" itself, as it looks in the game, so the player would recognise it? Not a map, ` +
           'logo, stat or damage icon, concept sketch, collage, AI-generated art, real-world photo or a different thing. Reply with JSON only: ') +
       '{"ok": true | false, "confidence": "high" | "medium" | "low", "what": "what it shows, one short sentence"}';
     const j = await ask(ai, cost, [{ inlineData: { mimeType: 'image/jpeg', data: jpeg } }, { text: prompt }], 200, 'visual-picture');
-    steps.push(`check ${t.site}: ${j?.ok ? 'yes' : 'no'} (${j?.confidence || '?'}) ${j?.what || ''}`);
+    steps.push(`check ${t.site}: ${j?.ok ? 'yes' : 'no'} (${j?.confidence || '?'})${where && j?.shows ? ` [${j.shows}]` : ''} ${j?.what || ''}`);
     if (j?.ok === true && j?.confidence === 'high') {
-      const pic = { kind: 'picture' as const, source: 'wiki' as const, url: t.url, alt: String(j.what || subject), credit: `${t.site}: ${t.title}`, link: t.page, page: { url: t.page, title: t.title, site: t.site }, why: String(j.what || ''), ...(/map/i.test(String(j.what || '')) ? { map: true } : {}) };
-      // A where-question: a map marking the spot beats a close-up of the spot, so the rest are looked at for one (the
-      // first good picture is kept when none is a map).
-      if (!where || pic.map) return pic;
-      best ||= pic;
+      const pic = { kind: 'picture' as const, source: 'wiki' as const, url: t.url, alt: String(j.what || subject), credit: `${t.site}: ${t.title}`, link: t.page, page: { url: t.page, title: t.title, site: t.site }, why: String(j.what || ''), ...(/\bmap\b/i.test(String(j.what || '')) ? { map: true } : {}) };
+      // A where-question: a map marking the spot beats the spot itself, which beats the thing alone (an icon), so the
+      // rest are looked at for a better one (the first of the best kind is kept).
+      if (!where) return { pic, rank: 3 };
+      const rank = j.shows === 'map' || pic.map ? 3 : j.shows === 'spot' ? 2 : 1;
+      if (rank === 3) return { pic, rank };
+      if (!best || rank > best.rank) best = { pic, rank };
     }
   }
   return best;
@@ -595,7 +603,7 @@ export async function visualFor(ai: Gen, o: {
     else {
       // Pictures come from the game's wikis only, checked (owner, Nov 14 2026: not from our own guides, whose pictures
       // aren't good enough for this): the thing itself first, then for a where-question the place it's in.
-      for (const name of (c.thing ? [c.subject] : [c.subject, c.place]).filter(Boolean)) if (!visual) visual = await wikiPicture(ai, cost, wiki, game, question, name, out.steps, !c.thing && (!!c.place || /where|find|locat/i.test(question)), c.thing, true, c.place);
+      for (const name of (c.thing ? [c.subject] : [c.subject, c.place]).filter(Boolean)) if (!visual) visual = await wikiPicture(ai, cost, wiki, game, question, name, out.steps, !c.thing && (!!c.place || /\bwhere\b|\bfind\b|locat/i.test(question)), c.thing, true, c.place);
       if (visual && excluded.has(visualId(visual))) { out.steps.push('the picture found was marked "Not right" before'); visual = null; }
       // A question about one named thing (owner, Nov 14 2026): its wiki page goes with the picture, and shows alone when
       // no picture was good enough.
