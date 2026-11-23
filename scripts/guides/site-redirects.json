@@ -4,6 +4,9 @@
     "the-shattered-passage": "fort-northreach",
     "the-shattered-scarp": "shatterscarp"
   },
+  "bioshock-infinite": {
+    "hand-of-the-prophet": "chapter-36-hand-of-the-prophet"
+  },
   "black-myth-wukong": {
     "black-bear-guai-chapter-1": "chapter-1-black-wind-mountain",
     "black-wind-mountain": "chapter-1-black-wind-mountain",
@@ -40,6 +43,8 @@
     "rainbow-shell": "giants-claw"
   },
   "control-ultimate-edition": {
+    "astral-collision": "",
+    "canyon-rim": "",
     "communications-department": "executive-affairs",
     "eagle-limited-awe-boss-fight-era": "eagle-limited-awe",
     "foundation": "crossroads"
@@ -307,6 +312,9 @@
     "hirata-estate-revisited": "hirata-estate-fathers-memory",
     "hirata-estate-second-memory": "hirata-estate-fathers-memory",
     "mibu-village": "ashina-depths"
+  },
+  "star-wars-jedi-survivor": {
+    "nova-garon": ""
   },
   "star-wars-knights-of-the-old-republic": {
     "tatooine-dune-sea": "tatooine-eastern-dune-sea"

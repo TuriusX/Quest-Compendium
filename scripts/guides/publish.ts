@@ -240,6 +240,12 @@ const GUIDE_MOVES: Record<string, { to: string; why?: string; pages?: Record<str
 const GUIDE_LANGS = new Set<string>(['en']);
 /** Each sitemap URL's last update (from the page's updatedAt), for <lastmod>. */
 const LASTMOD = new Map<string, number>();
+/**
+ * Pages on the site but held out of the sitemap (searchHold.ts). Redirects to them are kept (owner, Nov 23 2026: Search
+ * Console showed 404s such as black-myth-wukong/flaming-mountains, whose redirect to a held page was dropped because
+ * only sitemap pages counted as live).
+ */
+const HELD_SERVED = new Set<string>();
 /** Search Console impressions per guide (system/searchConsole: every page's figures when stored, else the top pages). */
 const DEMAND = new Map<string, number>();
 const PREVIEW = arg('preview') && arg('preview') !== 'true' ? String(arg('preview')) : '';
@@ -2030,6 +2036,8 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
         path: `guides/${key}/${o.slug}/`,
       }),
     );
+    // A held page is still on the site, just out of the sitemap: moved pages may still redirect to it.
+    if (!draft && !untranslated && held) HELD_SERVED.add(`${SITE}/${LP}guides/${key}/${o.slug}/`);
     if (!draft && !untranslated && !held) {
       sitemap.push(`${SITE}/${LP}guides/${key}/${o.slug}/`);
       if (Number((a as any).updatedAt)) LASTMOD.set(`${SITE}/${LP}guides/${key}/${o.slug}/`, Number((a as any).updatedAt));
@@ -3540,7 +3548,7 @@ async function main() {
   updateVersion();
   inlineHomeIcons();
   lintBuild();
-  writeRedirects(moved, new Set(sitemap));
+  writeRedirects(moved, new Set([...sitemap, ...HELD_SERVED]));
   writeGuideIndex(guideIndex);
   write404();
   // Links use the final URLs (/guides/x/, not /guides/x/index.html), so nothing a visitor or crawler follows redirects
