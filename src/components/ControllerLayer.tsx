@@ -29,6 +29,7 @@ import { padQuestionList, quickLabelKey } from '../utils/quickQuestions';
 import { createRingPointer, nextStop, ringSpot, type Stop } from '../utils/padStops';
 import { glyph, styleFromId, type PadStyle } from '../utils/padGlyphs';
 import { applySuggestion, buildVocab, deleteWord, suggest, type Vocab } from '../utils/padWords';
+import { padClick } from '../utils/padClick';
 import { Camera, CircleHelp, EyeOff, Gamepad2, Keyboard, LocateFixed, Mic, Move, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
@@ -135,7 +136,7 @@ function shown(el: HTMLElement): boolean {
 }
 
 function meaningful(el: HTMLElement): boolean {
-  if (el.closest('header') || el.closest('[data-qc-pad-ui]') || el.matches('[data-qc-send], [data-qc-log-popout], [aria-hidden="true"]')) return false;
+  if (el.closest('header') || el.closest('[data-qc-pad-ui]') || el.matches('[data-qc-send], [data-qc-log-popout], [data-pad-stop="quick"], [aria-hidden="true"]')) return false;
   const r = el.getBoundingClientRect();
   if (r.height < 18) return false;
   const text = (el.innerText || (el as HTMLInputElement).value || '').trim();
@@ -153,7 +154,9 @@ function gatherStops(): { els: HTMLElement[]; stops: Stop[] } {
   };
   const log = document.querySelector<HTMLElement>('[data-qc-log]');
   if (log && isVisible(log)) focusables(log).filter(meaningful).forEach(add);
-  const marked = Array.from(document.querySelectorAll<HTMLElement>(STOP_SEL)).filter((el) => !el.closest('[data-qc-log]') && !el.closest('[data-qc-pad-ui]'));
+  // (Not the quick questions under the answers: with a controller, questions are asked from the quick menu only. Owner,
+  // Nov 23 2026: an A press there asked one by accident.)
+  const marked = Array.from(document.querySelectorAll<HTMLElement>(STOP_SEL)).filter((el) => !el.closest('[data-qc-log]') && !el.closest('[data-qc-pad-ui]') && !el.matches('[data-pad-stop="quick"]'));
   const ask = marked.find((el) => el.matches('[data-qc-ask-input]'));
   // Answers scrolled out of view still count (up from the oldest one on screen goes on to older ones; the conversation
   // scrolls to it).
@@ -621,12 +624,12 @@ export function ControllerLayer({
         // adds or swaps in (electron/main.cjs).
         questionsTitle: t('pad.questions'), questions: quickIds.map((key, i) => ({ key, label: questionLabels[i] })),
         thinking: t('pad.cardThinking'), more: t('pad.cardMore'), spoken: t('pad.cardSpoken'), openAnswer: t('pad.openAnswer'), backToGame: t('pad.backToGame'),
-        moreAnswer: t('card.moreAnswer'), lastCard: t('orb.lastCard'),
+        moreAnswer: t('card.moreAnswer'), keepReading: t('card.keepReading'), lastCard: t('orb.lastCard'),
         // The pop-up answer's own words (electron/answerCard.html).
         card: {
           thinking: t('pad.cardThinking'), gotScreen: t('card.gotScreen'), sending: t('card.sending'), asking: t('card.asking'), proChecking: t('card.proChecking'),
           yourScreen: t('card.yourScreen'), more: t('card.more'), open: t('card.open'), moreBelow: t('card.moreBelow'), part: t('card.part'),
-          padMore: t('card.padMore'), padOpen: t('card.padOpen'), keysOpen: t('card.keysOpen'), combo: comboLabel,
+          padMore: t('card.padMore'), padOpen: t('card.padOpen'), padKeep: t('card.padKeep'), keysKeep: t('card.keysKeep'), keysOpen: t('card.keysOpen'), combo: comboLabel,
           mute: t('card.mute'), unmute: t('card.unmute'),
           play: t('visual.play'), pin: t('visual.pin'), pinTitle: t('visual.pinTitle'), startsAt: t('visual.startsAt'),
           // The orb in the card's corner (Nov 19 2026): its menu, its tooltip and its how-to-ask line.
@@ -1003,7 +1006,8 @@ export function ControllerLayer({
             cardRef.current = el;
             setFocus(first);
           }
-        } else if (el && el !== document.body && !el.matches('[data-qc-send]')) el.click();
+          // (A click from here never asks a question: utils/padClick.)
+        } else if (el && el !== document.body && !el.matches('[data-qc-send]')) padClick(() => el.click());
       } else if (b === 'b') {
         // Back: the open dialog closes. B never hides the app (hiding is the show / hide combo).
         closeTopDialog();

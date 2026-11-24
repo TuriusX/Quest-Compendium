@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('qcCard', {
   onShow: (cb) => ipcRenderer.on('card-show', (e, data) => cb(data || {})),
   onHide: (cb) => ipcRenderer.on('card-hide', () => cb()),
   onMore: (cb) => ipcRenderer.on('card-more', () => cb()),
+  // More of the answer to read aloud (Nov 23 2026): the footer says how to hear it.
+  onRead: (cb) => ipcRenderer.on('card-read', (e, r) => cb(r || {})),
   onTimer: (cb) => ipcRenderer.on('card-timer', (e, t) => cb(t || {})),
   size: (h) => ipcRenderer.send('card-size', Number(h) || 0),
   state: (s) => ipcRenderer.send('card-state', s || {}),

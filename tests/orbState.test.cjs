@@ -32,19 +32,9 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
     assert.deepEqual(look(s), { window: true, orb: true, card: false, dot: false, menu: false });
   });
 
-  await test('an answer whose time ran out leaves the dot; closing it, a question without an answer or the hint do not', () => {
+  await test('no dot on the orb (owner, Nov 23 2026: "pointless"), however a card went back in', () => {
     const away = run(createOrbState(), { type: 'away', away: true });
-    assert.equal(look(run(away, { type: 'show', kind: 'answer' }, { type: 'fold', reason: 'timer' })).dot, true);
-    assert.equal(look(run(away, { type: 'show', kind: 'answer' }, { type: 'fold', reason: 'close' })).dot, false);
-    assert.equal(look(run(away, { type: 'show', kind: 'thinking' }, { type: 'fold', reason: 'timer' })).dot, false);
-    assert.equal(look(run(away, { type: 'show', kind: 'hint' }, { type: 'fold', reason: 'timer' })).dot, false);
-    // The next card (or bringing it back) clears it.
-    const dotted = run(away, { type: 'show', kind: 'answer' }, { type: 'fold', reason: 'timer' });
-    assert.equal(run(dotted, { type: 'show', kind: 'answer' }).dot, false);
-    // The dot waits while the panel is open, and shows again when it goes.
-    const panel = run(dotted, { type: 'away', away: false });
-    assert.equal(look(panel).dot, false);
-    assert.equal(look(run(panel, { type: 'away', away: true })).dot, true);
+    for (const reason of ['timer', 'close', 'other']) assert.equal(look(run(away, { type: 'show', kind: 'answer' }, { type: 'fold', reason })).dot, false);
   });
 
   await test('the menu opens only on a resting orb, and closes with a card, the panel or Hide', () => {
@@ -101,6 +91,7 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
         send: (c, p) => self.sent.push([c, p]),
         once: (ev, cb) => { if (ev === 'did-finish-load') setTimeout(cb, 0); },
         invalidate: () => {},
+        on: () => {},
       };
       wins.push(this);
     }
@@ -138,7 +129,7 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
     card.setAway(true);
     tick(1);
     assert.equal(win().visible, true);
-    assert.deepEqual(win().getBounds(), { x: 1920 - 520 - 24, y: 0, width: 520 + 24, height: 624 + 24 });
+    assert.deepEqual(win().getBounds(), { x: 1920 - 520 - 24, y: 0, width: 520 + 24, height: 1040 - 48 + 24 }); // nearly the screen's height: More grows the card down (Nov 23 2026)
     assert.equal(lastOrb().orb, true);
     // Click-through without forwarding: the watch lets the mouse in.
     assert.deepEqual(win().ignore[win().ignore.length - 1], [true, false]);
@@ -166,7 +157,7 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
     assert.equal(win().visible, true); // the orb stays
   });
 
-  await test('an answer grows out of the orb and is read aloud; its time runs out: back in, with the dot', () => {
+  await test('an answer grows out of the orb and is read aloud; its time runs out: back in (no dot)', () => {
     spoken.length = 0;
     card.thinking({ question: 'Where now?', mode: 'keys' });
     card.answer(ANSWER);
@@ -175,11 +166,11 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
     tick(90001);
     assert.equal(card.isShowing(), false);
     assert.ok(win().sent.some(([c]) => c === 'card-hide'));
-    assert.equal(lastOrb().dot, true);
+    assert.equal(lastOrb().dot, false);
     assert.equal(win().visible, true);
   });
 
-  await test('a left click brings the last card back, not read aloud, and clears the dot', () => {
+  await test('a left click brings the last card back, not read aloud', () => {
     spoken.length = 0;
     fromPage('orb-action', 'click');
     const shown = [...win().sent].reverse().find(([c]) => c === 'card-show')[1];
@@ -260,6 +251,23 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
     assert.equal(win().visible, false);
     fromPage('orb-action', 'click'); // no orb, no click
     assert.equal(card.isShowing(), false);
+  });
+
+  await test('a video found after the card went: the card comes back with it, not read from the start again', () => {
+    spoken.length = 0;
+    card.answer({ ...ANSWER, id: 'v1' });
+    assert.equal(spoken.filter(Boolean).length, 1);
+    tick(90001);
+    assert.equal(card.isShowing(), false);
+    card.answer({ ...ANSWER, id: 'v1', picture: { url: 'https://i.ytimg.com/vi/abcdefgh/hqdefault.jpg', video: true, videoId: 'abcdefgh' } });
+    const shown = [...win().sent].reverse().find(([c]) => c === 'card-show')[1];
+    assert.equal(shown.picture.videoId, 'abcdefgh');
+    assert.equal(spoken.filter(Boolean).length, 1);
+    // Over a newer question's card it waits instead (the card keeps thinking).
+    card.thinking({ question: 'And then?', mode: 'keys' });
+    card.answer({ ...ANSWER, id: 'v1', picture: null });
+    assert.equal(card.isThinking(), true);
+    card.hide();
   });
 
   mock.timers.reset();

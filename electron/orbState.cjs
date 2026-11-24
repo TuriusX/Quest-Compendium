@@ -44,8 +44,8 @@ function reduce(s, ev) {
     case 'fold': { // the card goes back in: its time ran out ('timer'), ✕ or Open ('close'), or put away ('other')
       if (n.view !== 'card') return n;
       n.view = 'orb';
-      // Only an answer the player didn't close leaves the dot (a question that never got its answer, or the hint, don't).
-      if (ev.reason === 'timer' && n.kind === 'answer') n.dot = true;
+      // (No dot any more for an answer whose time ran out: owner, Nov 23 2026, "get rid of the dot notification that
+      // can sometimes be on the floating orb. It's pointless.")
       return n;
     }
     case 'menu':

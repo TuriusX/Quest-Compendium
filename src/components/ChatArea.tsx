@@ -69,6 +69,7 @@ import { isCompanion } from '../utils/companion';
 import { TtsPlayer } from '../utils/ttsPlayer';
 import { voiceEnd, rmsOf } from '../utils/voiceEnd';
 import type { Detection } from './DetectionLine';
+import { padClicking } from '../utils/padClick';
 declare const __APP_BUILD__: { version: string } | undefined;
 const BUILD = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : { version: 'dev' };
 
@@ -758,7 +759,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Controller: a question picked from the quick-questions list or typed on the on-screen keyboard.
   const handleControllerAsk = (e: Event) => {
     const { text, quick } = (e as CustomEvent).detail || {};
-    if (typeof text === 'string' && text.trim() && !isLoading) {
+    if (typeof text === 'string' && text.trim() && !isLoading && !padClicking()) {
       setInputQuestion('');
       handleSubmit(undefined, text.trim(), undefined, quick);
     }
@@ -947,7 +948,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // A quick question (a chip): its label is the question, and the id tells the server what it asks for.
   const handleSubmit = async (e?: React.FormEvent, overrideText?: string, overrideImage?: string, quick?: QuickId) => {
     if (e) e.preventDefault();
-    if (isLoading) return;
+    // The controller's A on a button never asks (utils/padClick; owner, Nov 23 2026: only the quick menu asks).
+    if (isLoading || padClicking()) return;
     if (mode === 'guide') setMode('ask'); // show the answer
 
     // In electron, we auto-capture if no image is attached

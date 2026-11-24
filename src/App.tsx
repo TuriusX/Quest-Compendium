@@ -91,6 +91,7 @@ import type { EarlierSession } from './utils/earlierSessions';
 import { isCompanion } from './utils/companion';
 import { padComboLabel, padPreset } from './utils/padGlyphs';
 import { missablesThin } from './utils/missablesCheck';
+import { padClicking } from './utils/padClick';
 
 /**
  * The running game's picture, sharp at any screen scale (utils/artCache.ts): IGDB's key art at 720p when its guide has
@@ -1187,53 +1188,72 @@ export default function App() {
   // Its one picture, in Noah's order: the answer's own visual, else a close-up from the question's screenshot that the
   // marker check confirmed is there, else none. The card never mentions markers.
   const cardSeenRef = useRef<string | null>(null);
+  // The answer last sent to the card, and what it had then: its picture can come 15-30 s later (a video search), by
+  // when the answer may not be the newest message any more, or not in this tab at all (a question about another game
+  // is filed in that game's compendium). Owner, Nov 23 2026: "videos are showing up fine in the app ... It's just not
+  // showing in the pop up cards".
+  const cardSentRef = useRef<{ id: string; sig: string } | null>(null);
   const cardCloseUpRef = useRef(new Map<string, string>());
   const [cardCloseUpTick, setCardCloseUpTick] = useState(0);
   useEffect(() => {
     const api = (window as any).electronAPI;
     if (!api?.answerArrived || !activeTab) return;
-    const msgs = activeTab.messages;
-    const last = msgs[msgs.length - 1];
-    // Its pop-up summary is on the way (at most 8 s): the card keeps thinking until it's here.
-    // (One left over from a closed app is ignored.)
-    if (last && last.role === 'assistant' && last.summaryPending && Date.now() - (last.timestamp || 0) < 15000) return;
-    const v = last && last.role === 'assistant' && !last.visualHidden ? last.visual : undefined;
-    const dr = last && last.role === 'assistant' && !last.drawnHidden ? last.drawn : undefined;
-    const closeUp = last ? cardCloseUpRef.current.get(last.id) : undefined;
-    // A drawn answer comes first (owner, Nov 18 2026), shown across the card.
-    const picture =
-      dr ? {
-        url: dr.url, wide: true,
-        credit: dr.on === 'illustration' ? tr('drawn.illustrationNote') : dr.found ? `${tr('visual.map')} · ${dr.page?.site || 'wiki'}` : dr.on === 'wiki' ? tr('drawn.onWiki', { site: dr.page?.site || 'wiki' }) : tr('drawn.onScreen'),
-        ...(dr.on === 'illustration' ? { tag: tr('drawn.illustration') } : {}),
-      }
+    const pictureOf = (m: ChatMessage) => {
+      const v = !m.visualHidden ? m.visual : undefined;
+      const dr = !m.drawnHidden ? m.drawn : undefined;
+      const closeUp = cardCloseUpRef.current.get(m.id);
+      // A drawn answer comes first (owner, Nov 18 2026), shown across the card.
+      return dr ? {
+          url: dr.url, wide: true,
+          credit: dr.on === 'illustration' ? tr('drawn.illustrationNote') : dr.found ? `${tr('visual.map')} · ${dr.page?.site || 'wiki'}` : dr.on === 'wiki' ? tr('drawn.onWiki', { site: dr.page?.site || 'wiki' }) : tr('drawn.onScreen'),
+          ...(dr.on === 'illustration' ? { tag: tr('drawn.illustration') } : {}),
+        }
         : v?.kind === 'picture' && v.source !== 'ours' ? { url: v.url, credit: v.credit || v.page?.site || '' }
         : v?.kind === 'video' ? { url: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`, credit: v.channel || 'YouTube', video: true, videoId: v.videoId, start: v.start, seconds: v.seconds, title: v.title }
         : closeUp ? { url: closeUp, credit: tr('card.yourScreen') }
         : null;
-    const sig = last && last.role === 'assistant' ? `${last.id}:${(last.text || '').length}:${picture?.url.slice(-40) || ''}` : '';
+    };
+    const sigOf = (m: ChatMessage) => `${m.id}:${(m.text || '').length}:${pictureOf(m)?.url.slice(-40) || ''}`;
+    const send = (m: ChatMessage, tab: GameTab) => {
+      const i = tab.messages.findIndex((x) => x.id === m.id);
+      let question = '';
+      for (let k = i - 1; k >= 0; k--) if (tab.messages[k].role === 'user') { question = String(tab.messages[k].text || ''); break; }
+      cardSentRef.current = { id: m.id, sig: sigOf(m) };
+      api.answerArrived({
+        id: m.id,
+        question: question.slice(0, 200),
+        title: m.title || '',
+        text: String(m.text || '').slice(0, 6000),
+        steps: (m.steps || []).map((s) => ({ kind: s.kind, label: s.label || s.text, where: s.where || '' })),
+        model: /pro/i.test(m.modelUsed || '') ? 'Pro' : m.modelUsed ? 'Fast' : '',
+        place: tab.place?.name || '',
+        combat: !!m.combat,
+        picture: pictureOf(m),
+        // Immersive mode (owner, Nov 20 2026, idea #8): the pop-up's storybook look.
+        immersive: settings.aiMode === 'roleplay',
+      });
+    };
+    const msgs = activeTab.messages;
+    const last = msgs[msgs.length - 1];
+    // Its pop-up summary is on the way (older answers; none are asked for since Nov 23 2026). (One left over from a
+    // closed app is ignored.)
+    if (last && last.role === 'assistant' && last.summaryPending && Date.now() - (last.timestamp || 0) < 15000) return;
+    const sig = last && last.role === 'assistant' ? sigOf(last) : '';
     const first = cardSeenRef.current === null;
-    if (sig === cardSeenRef.current) return;
-    cardSeenRef.current = sig;
-    if (first || !sig) return; // what was there on start isn't new
-    let question = '';
-    for (let i = msgs.length - 2; i >= 0; i--) if (msgs[i].role === 'user') { question = String(msgs[i].text || ''); break; }
-    api.answerArrived({
-      id: last.id,
-      question: question.slice(0, 200),
-      title: last.title || '',
-      text: String(last.text || '').slice(0, 6000),
-      steps: (last.steps || []).map((s) => ({ kind: s.kind, label: s.label || s.text, where: s.where || '' })),
-      // What to do now (Nov 19 2026), until a bigger hint level is opened.
-      summary: last.summary || '',
-      model: /pro/i.test(last.modelUsed || '') ? 'Pro' : last.modelUsed ? 'Fast' : '',
-      place: activeTab.place?.name || '',
-      combat: !!last.combat,
-      picture,
-      // Immersive mode (owner, Nov 20 2026, idea #8): the pop-up's storybook look.
-      immersive: settings.aiMode === 'roleplay',
-    });
-  }, [activeTab?.messages, cardCloseUpTick]);
+    if (sig !== cardSeenRef.current) {
+      cardSeenRef.current = sig;
+      if (!first && sig && last.text) return void send(last, activeTab); // what was there on start isn't new
+    }
+    // The answer on the card, wherever it is now: its picture (or new text) goes to it.
+    const sent = cardSentRef.current;
+    if (!sent || (last && last.id === sent.id)) return;
+    for (const t of tabs) {
+      const m = t.messages.find((x) => x.id === sent.id);
+      if (!m) continue;
+      if (sigOf(m) !== sent.sig) send(m, t);
+      break;
+    }
+  }, [tabs, activeTab?.id, cardCloseUpTick]);
   useEffect(() => {
     const on = () => void runHelpRef.current();
     window.addEventListener('qc-help-here', on);
@@ -3197,7 +3217,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     void sendRef.current(...p.args, p.target ? { routed: true } : undefined);
   }, [activeTab?.id, resolvedNow, runId]);
   const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash', quick?: string, opts?: { routed?: boolean }) => {
-    if (!activeTab) return;
+    // The controller's A on a button never asks (utils/padClick; owner, Nov 23 2026: only the quick menu asks).
+    if (!activeTab || padClicking()) return;
     // The running game's compendium (owner, Nov 19 2026: questions "always go to the running game silently"): asked from
     // another compendium, the game's own opens and the question is asked there; asked in the first seconds of a game,
     // before it's known, the question waits for it (pendingAsk; at most a few seconds). A question that names the open
@@ -3477,10 +3498,10 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       }
 
       const nowAi = Date.now();
-      // The desktop app: the answer may pop up on the card, with a summary to show and read aloud. Always asked for
-      // there (owner, Nov 20 2026: the card reading its summary is ideal; it used to need a detected game, so cards asked
-      // without one had none). The card reads the answer's start only if the summary fails.
-      const wantCardSummary = !!(window as any).electronAPI?.answerArrived;
+      // No pop-up summaries since Nov 23 2026 (owner: "I think just reading the actual full answer is going to be more
+      // valuable"): the card shows and reads the answer itself (electron/answerCard.cjs). fetchCardSummary and the
+      // server's /api/card-summary stay for older desktop versions.
+      const wantCardSummary = false;
       const aiMessage: ChatMessage = {
         id: `msg-${nowAi + 1}`,
         role: 'assistant',

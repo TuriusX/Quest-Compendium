@@ -905,6 +905,11 @@ app.whenReady().then(() => {
         answerCard.more();
         return void quickWheel.close();
       }
+      // The next part of the answer read aloud (owner, Nov 23 2026).
+      if (key === 'keep') {
+        answerCard.keepReading();
+        return void quickWheel.close();
+      }
       // Back to the game (the wheel opened over the panel): the panel slides away and the game gets focus back.
       if (key === 'back') return void quickWheel.close(true).then(() => slideOut());
       // The answer on the card, in the panel.
@@ -1032,6 +1037,10 @@ app.whenReady().then(() => {
       if (!mainWindow || mainWindow.isDestroyed() || quickWheel.isOpen() || !quickWheel.hasItems()) return;
       const fanAt = !isAppVisible && answerCard.orbOn() ? answerCard.fanAnchor() : null;
       if (how.mode === 'mouse' && !fanAt) return;
+      // The controller's combo (or the keyboard's shortcut) stops the voice at once (owner, Nov 23 2026: "we will need
+      // to be able to mute immediately"; holding B would press B in the game too). Keep reading then starts that part
+      // again. (The mouse resting on the orb doesn't: it opens the fan without meaning to stop anything.)
+      if (how.mode !== 'mouse') answerCard.stopReading();
       // Always the quick menu, over the game or the panel (owner, Nov 17 2026: wheel first). With the panel up,
       // "Open the panel" becomes "Back to the game"; with an answer on the card, "Open this answer" comes first.
       const s = quickWheel.strings() || {};
@@ -1040,6 +1049,8 @@ app.whenReady().then(() => {
       else if (answerCard.recent() || (answerCard.orbOn() && answerCard.hasLast())) {
         // An answer on the card: More of it first (while there's more), then Open in the panel.
         const extra = [];
+        // Keep reading first (owner, Nov 23 2026): the answer is read a part at a time, and this reads the next.
+        if (answerCard.canKeepReading() && s.keepReading) extra.push({ key: 'keep', label: s.keepReading });
         if (answerCard.canMore() && s.moreAnswer) extra.push({ key: 'more', label: s.moreAnswer });
         // (No "Last card" since Nov 20 2026, owner: clicking the orb does it. Voice and quick questions took its place,
         // so they stay on the fan's first ring with a card's own items before them.)

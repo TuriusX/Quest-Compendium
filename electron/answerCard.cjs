@@ -11,12 +11,16 @@
  *   update(payload)   the same answer with its picture, arrived later
  *   more()   the rest of the answer in place, then its next part (the quick menu's "More of this answer")
  *   pause() / resume()   while the quick menu is open, or the mouse is over the card
- *   setPrefs({ size, corner, speak, orb, orbStyle })   Settings: Small / Medium / Large, the corner, reading the summary aloud, the orb and its look
- *   speaking(on)   the summary is being read aloud: the card stays until it's done
+ *   setPrefs({ size, corner, speak, orb, orbStyle })   Settings: Small / Medium / Large, the corner, reading aloud, the orb and its look
+ *   speaking(on)   a part of the answer is being read aloud: the card stays until it's done
+ *   keepReading() / stopReading()   the next part read aloud (the quick menu's Keep reading) / reading stops now
  *
- * Summaries (owner, Nov 19 2026: quick information to get on with what led to the question): an answer with a summary
- * (src/utils/cardSummary.ts; its own call after the answer, so the answer never changes) shows the summary, its warnings and its picture; More shows the whole answer. The summary
- * is read aloud (opts.onSpeak) unless the card's speaker button or Settings turned that off (opts.onSpeakPref).
+ * The whole answer (owner, Nov 23 2026: no more summaries; "just reading the actual full answer is going to be more
+ * valuable"): the card shows the answer itself in smaller type, and More (the card's button, or the quick menu's More
+ * of this answer) grows the card to show the rest. It is read aloud a part at a time (spokenParts: about 25 seconds,
+ * ending where a paragraph or sentence ends; opts.onSpeak), unless the card's speaker button or Settings turned that
+ * off (opts.onSpeakPref). The quick menu's Keep reading reads the next part; the controller's combo stops the voice at
+ * once (it opens the quick menu: main.cjs), since holding A or B would press them in the game too.
  *
  * The orb (owner, Nov 19 2026: "a glowing orb floating there that contorts itself into a card and then back up to the
  * orb again"; Settings → Pop-up answers, on by default): while the panel is away (setAway), this window stays over the
@@ -49,25 +53,59 @@ const DWELL_MS = 150; // the mouse resting on the orb this long opens the quick 
 
 /** How long an answer stays: reading time for what's showing (20 s + 1 s per 15 words), at most 90 s; a warning, 30 s at least. */
 /**
- * What a card reads aloud (owner, Nov 20 2026: every new card is read, whichever way it was asked): its summary, or,
- * without one (no game detected, a short answer, the summary call failed), the answer's start: plain words (no
- * markdown, links or tags), whole sentences up to about 600 characters.
+ * What a card reads aloud (owner, Nov 20 2026: every new card is read, whichever way it was asked; Nov 23 2026: no
+ * summaries, the real answer, "read aloud until it feels like that's enough ... at a logical end like the end of a
+ * sentence or paragraph", and the player chooses to hear more). The answer in plain words (no markdown, links or tags),
+ * cut into parts of about READ_WORDS words (some 25 seconds aloud), each ending where a paragraph ends, or a sentence
+ * in a long one. The first part is read; "Keep reading" on the quick menu reads the next.
  */
-function spokenText(card) {
-  if (!card) return '';
-  if (card.summary) return card.summary;
-  const plain = String(card.text || '')
+const READ_WORDS = 65;
+const wordCount = (s) => String(s || '').split(/\s+/).filter(Boolean).length;
+function plainSpoken(s) {
+  return String(s || '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/<[^>]+>/g, ' ')
     .replace(/^#+\s*(.*?)[.:]?\s*$/gm, '$1.')
-    .replace(/^\s*[-•]\s+/gm, '')
+    .replace(/^\s*(?:[-•*]|\d+[.)])\s+/gm, '')
     .replace(/[*_`~>|]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  if (plain.length <= 600) return plain;
-  const cut = plain.slice(0, 600);
-  const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
-  return end > 120 ? cut.slice(0, end + 1) : `${cut.replace(/\s+\S*$/, '')}…`;
+}
+function spokenParts(text) {
+  // Paragraphs: blank lines, and each list item on its own.
+  const paras = String(text || '')
+    .split(/\n\s*\n|\n(?=\s*(?:[-•*]|\d+[.)])\s)/)
+    .map(plainSpoken)
+    .filter(Boolean);
+  const parts = [];
+  let cur = '';
+  for (const p of paras) {
+    // A long paragraph goes sentence by sentence (so a part can end inside it, at a sentence's end).
+    const pieces = wordCount(p) > READ_WORDS * 1.5 ? (p.match(/[^.!?]+[.!?]+["')\]]*|[^.!?]+$/g) || [p]).map((x) => x.trim()).filter(Boolean) : [p];
+    for (const piece of pieces) {
+      // (A paragraph that would take it well past the mark waits for the next part; up to 30% over, it's finished.)
+      if (cur && wordCount(cur) + wordCount(piece) > READ_WORDS * 1.3 && wordCount(cur) >= READ_WORDS * 0.5) {
+        parts.push(cur);
+        cur = piece;
+      } else cur = cur ? `${cur} ${piece}` : piece;
+      // Inside a long paragraph: a sentence's end, once enough has been said.
+      if (pieces.length > 1 && wordCount(cur) >= READ_WORDS) {
+        parts.push(cur);
+        cur = '';
+      }
+    }
+    // Enough said by the end of a paragraph: a natural place to stop.
+    if (wordCount(cur) >= READ_WORDS * 0.7) {
+      parts.push(cur);
+      cur = '';
+    }
+  }
+  // A short last bit goes with the part before it (never a "Keep reading" for one line).
+  if (cur) {
+    if (parts.length && wordCount(cur) < 15) parts[parts.length - 1] += ` ${cur}`;
+    else parts.push(cur);
+  }
+  return parts;
 }
 
 function readingMs(text, hasWarning) {
@@ -106,7 +144,8 @@ function createAnswerCard(opts) {
   let shownAt = 0;
   let prefs = { size: 'm', corner: 'tr', speak: true, orb: true, orbStyle: 'orb' };
   let orb = orbState.createOrbState();
-  let speakingNow = false; // the summary is being read aloud (the timer waits)
+  let speakingNow = false; // a part of the answer is being read aloud (the timer waits)
+  let readingPart = -1; // which part (current.readAt then moves on when it ends by itself)
   let height = 200;
   let moreState = { more: false, part: 0, parts: 0 };
   let total = 0; // the current timer's full length
@@ -132,7 +171,9 @@ function createAnswerCard(opts) {
   const width = () => Math.round(WIDTH * scale());
   const maxHeight = () => {
     const d = opts.display();
-    return Math.round((d.workArea || d.bounds).height * 0.6);
+    // Nearly the screen's height (Nov 23 2026, owner: "card expand down more not out. I want to be able to read all of
+    // it in the card if the player wants to do that"): More grows the card down, and pages through the whole answer.
+    return Math.round((d.workArea || d.bounds).height - MARGIN * 2);
   };
   const alive = () => !!win && !win.isDestroyed();
 
@@ -380,7 +421,7 @@ function createAnswerCard(opts) {
 
   /** The card goes: it fades (the orb off) or folds back into the orb. reason: 'timer', 'close' or 'other'. */
   function hide(reason = 'other') {
-    if (speakingNow || (current && current.summary)) stopSpeaking();
+    if (speakingNow) stopSpeaking();
     clearTimeout(timer);
     timer = null;
     const wasShown = !!shownAt;
@@ -402,15 +443,31 @@ function createAnswerCard(opts) {
 
   const look = () => ({ strings: opts.strings(), scale: scale(), bottom: prefs.corner === 'bl' || prefs.corner === 'br', right: prefs.corner === 'tr' || prefs.corner === 'br', maxHeight: maxHeight(), speak: prefs.speak, orb: orb.on });
 
-  const speak = () => {
-    const text = spokenText(current);
-    if (text && prefs.speak && opts.onSpeak) opts.onSpeak({ id: current.id, text });
+  /** The answer's parts to read aloud (worked out once per text). */
+  const partsOf = (c) => {
+    if (!c) return [];
+    if (!c.parts || c.partsFor !== c.text) { c.parts = spokenParts(c.text); c.partsFor = c.text; }
+    return c.parts;
   };
+  /** Reads the card's next part aloud (the first, for a new answer). force: even with reading aloud off (Keep reading). */
+  const speak = (force = false) => {
+    if (!current || !opts.onSpeak || (!prefs.speak && !force)) return;
+    const parts = partsOf(current);
+    const at = Number(current.readAt) || 0;
+    if (at >= parts.length) return;
+    readingPart = at;
+    current.readStarted = true;
+    opts.onSpeak({ id: current.id, text: parts[at] });
+  };
+  /** More of the answer to read aloud (and none being read now): "Keep reading" on the quick menu. */
+  const canKeepReading = () => !!current && !!shownAt && !speakingNow && current.state === 'answer' && !!current.readStarted && (Number(current.readAt) || 0) < partsOf(current).length;
+  const paintRead = () => send('card-read', { more: canKeepReading() });
   function stopSpeaking() {
     if (opts.onSpeak) opts.onSpeak(null);
     if (speakingNow) { speakingNow = false; resume(); }
+    paintRead();
   }
-  /** The card's speaker button and the orb's Mute read-aloud: reading the summary aloud off (it stops now) or on again. */
+  /** The card's speaker button and the orb's Mute read-aloud: reading aloud off (it stops now) or on again. */
   function toggleSpeak(readNow) {
     prefs.speak = !prefs.speak;
     if (opts.onSpeakPref) opts.onSpeakPref(prefs.speak);
@@ -443,8 +500,9 @@ function createAnswerCard(opts) {
     current = { ...last, at: Date.now() };
     moreState = { more: false, part: 0, parts: 0 };
     const warns = current.steps.filter((s) => s.kind === 'warning');
-    showFor(readingMs(`${current.title} ${current.summary || current.text.split(/\s+/).slice(0, 120).join(' ')}`, warns.length > 0), 'answer');
+    showFor(readingMs(`${current.title} ${current.text.split(/\s+/).slice(0, 120).join(' ')}`, warns.length > 0), 'answer');
     send('card-show', { ...current, ...look() });
+    paintRead();
     return true;
   }
   /** No answer yet: one line on how to ask (the quick menu's keys, the controller's combo). */
@@ -470,7 +528,7 @@ function createAnswerCard(opts) {
     if (!fromCard(event)) return;
     if (what === 'close') return void api.hide();
     if (what === 'open') opts.onAction('open', current);
-    // The speaker button: reading the summary aloud off (it stops now) or on again (it reads this one).
+    // The speaker button: reading aloud off (it stops now) or on again (it reads this one).
     if (what === 'speak') toggleSpeak(true);
     // Pin beside the game (pin.cjs): the video goes on in its own small window (the card's player has stopped).
     const p = current && current.picture;
@@ -550,6 +608,14 @@ function createAnswerCard(opts) {
     /** An answer (the newest while the card is up): it replaces whatever the card showed. */
     answer(a) {
       if (!a || !a.text) return;
+      // The last answer again (its video found after the card had gone, Nov 23 2026): it comes back with the video,
+      // where it had got to reading it, and isn't read from the start again. Not over a newer question's card.
+      const again = !!last && last.id === String(a.id || '');
+      if (again && thinkingNow) {
+        last.picture = pictureOf(a.picture);
+        return;
+      }
+      const readFrom = again ? { readAt: Number(last.readAt) || 0, readStarted: !!last.readStarted } : { readAt: 0 };
       const mode = (thinkingNow && thinkingNow.mode) || (current && current.mode) || 'keys';
       // What was asked, as the card said it while thinking ("Screenshot & ask", a quick question), not the app's
       // stand-in text for a screenshot or a voice question.
@@ -561,8 +627,8 @@ function createAnswerCard(opts) {
         id: String(a.id || ''), question: asked || String(a.question || ''), title: String(a.title || ''), text: String(a.text || '').slice(0, 6000),
         steps, model: a.model === 'Pro' || a.model === 'Fast' ? a.model : '', place: String(a.place || ''), combat: !!a.combat,
         picture: pictureOf(a.picture),
-        // What to do now, shown instead of the answer's start and read aloud (Nov 19 2026).
-        summary: String(a.summary || '').slice(0, 400),
+        // (No summary since Nov 23 2026, owner: "just reading the actual full answer is going to be more valuable".)
+        ...readFrom,
         // Immersive mode (Nov 20 2026): the card's storybook look.
         immersive: !!a.immersive,
         at: Date.now(),
@@ -570,17 +636,10 @@ function createAnswerCard(opts) {
       last = current;
       moreState = { more: false, part: 0, parts: 0 };
       if (speakingNow) stopSpeaking();
-      if (current.summary) {
-        const warns = steps.filter((s) => s.kind === 'warning');
-        showFor(readingMs(`${current.title} ${current.summary} ${warns.map((s) => s.label).join(' ')}`, warns.length > 0), 'answer');
-        send('card-show', { ...current, ...look() });
-        speak();
-        return;
-      }
-      const shown = steps.length ? `${current.text.split(/\s+/).slice(0, 60).join(' ')} ${steps.map((s) => `${s.label} ${s.where}`).join(' ')}` : current.text.split(/\s+/).slice(0, 180).join(' ');
-      showFor(readingMs(`${current.title} ${shown}`, steps.some((s) => s.kind === 'warning')), 'answer');
+      showFor(readingMs(`${current.title} ${current.text.split(/\s+/).slice(0, 180).join(' ')}`, steps.some((s) => s.kind === 'warning')), 'answer');
       send('card-show', { ...current, ...look() });
-      speak();
+      if (again) paintRead();
+      else speak();
     },
     /** The same answer, updated (its picture arrived later): the card redraws without restarting its time. */
     update(a) {
@@ -589,7 +648,6 @@ function createAnswerCard(opts) {
       const text = String(a.text || '').slice(0, 6000);
       if (text && text !== current.text) {
         current.text = text;
-        current.summary = String(a.summary || '').slice(0, 400);
         current.steps = (Array.isArray(a.steps) ? a.steps : []).slice(0, 8).map((s) => ({ kind: s.kind === 'warning' ? 'warning' : 'step', label: String(s.label || '').slice(0, 160), where: String(s.where || '').slice(0, 160) }));
         moreState = { more: false, part: 0, parts: 0 };
         last = current;
@@ -622,7 +680,7 @@ function createAnswerCard(opts) {
     canMore: () => !!current && !!shownAt && moreState.more,
     pause,
     resume,
-    /** The summary is being read aloud (true) or the reading ended (false): the card stays a little after it ends. */
+    /** A part is being read aloud (true) or the reading ended (false): the card stays a little after it ends. */
     speaking(on) {
       if (!shownAt || thinkingNow) return;
       if (on && !speakingNow) {
@@ -633,10 +691,29 @@ function createAnswerCard(opts) {
           send('card-timer', { left: pausedLeft, total, paused: true });
         }
       } else if (!on && speakingNow) {
+        // The part was read to its end (a stop goes through stopSpeaking, which leaves the part to read again).
         speakingNow = false;
-        if (pausedLeft) pausedLeft = Math.max(pausedLeft, 8000);
+        if (current && readingPart >= 0) current.readAt = readingPart + 1;
+        readingPart = -1;
+        if (pausedLeft) pausedLeft = Math.max(pausedLeft, canKeepReading() ? 15000 : 8000);
         resume();
+        paintRead();
       }
+    },
+    /** More of the answer read aloud (the quick menu's "Keep reading"): the next part, the card back if it had gone. */
+    keepReading() {
+      if (!current) return;
+      if (!shownAt) {
+        showFor(30000, 'answer');
+        send('card-show', { ...current, ...look() });
+      }
+      if (speakingNow) return;
+      speak(true);
+    },
+    canKeepReading,
+    /** Reading aloud stops now (the controller's combo opened the quick menu): Keep reading starts that part again. */
+    stopReading() {
+      if (speakingNow) stopSpeaking();
     },
     hide() {
       current = null;
@@ -745,4 +822,4 @@ function createAnswerCard(opts) {
   return api;
 }
 
-module.exports = { createAnswerCard, readingMs };
+module.exports = { createAnswerCard, readingMs, spokenParts };
