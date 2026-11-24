@@ -3,7 +3,7 @@
   "private": true,
   "description": "An intelligent gaming companion and reference tool.",
   "author": "Noah Minton",
-  "version": "0.9.11",
+  "version": "0.9.12",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -42,7 +42,6 @@
     "firebase-admin": "^14.3.0",
     "koffi": "^2.16.3",
     "lucide-react": "^0.546.0",
-    "motion": "^12.23.24",
     "openai": "^7.60.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
