@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { balancesOf, deviceTimeZone, topUpLine, untilReset } from './utils/answerModel';
-import { BookOpen, Plus, Sparkles, Gamepad2, Search, Camera, Mic, Moon, FileText, Globe } from './components/icons';
+import { BookOpen, Plus, Sparkles, Gamepad2, Search, Camera, Mic, Moon, FileText, Globe, MapPin } from './components/icons';
 import { 
   GameTab, 
   SteamGameData, 
@@ -948,6 +948,10 @@ export default function App() {
   if (runningOpen && activeTab && collection?.appId === runningAppId && collection.games.length > 1 && !activeTab.guideKey && !trackerGame.guideKey) {
     detection.choose = { games: collection.games, onPick: (key) => chooseCollectionGame(activeTab.id, key) };
   }
+  // The line under the header only when it has something to do (owner, Nov 24 2026, the one-bar header): a running game
+  // whose compendium isn't open (Switch / Open a tab), "Which game?", just switched or opened, or "Playing X?". "No game
+  // detected" and "Playing X · this compendium" are the game picture's dot in the header instead.
+  const detectionActionable = (!!detection.running && (!detection.open || !!detection.choose || !!detection.switched || !!detection.created)) || (!detection.running && !!detection.confirm);
   // A place is always one guide area: a saved place with two joined ("Emerald Grove, Ravaged Beach") becomes the first
   // area in it, in the tab and the game's saved progress, once the guide's areas are known.
   const guideAreaNames = (trackerGame.guideArea?.areas || []).map((a) => a.name).join('\u0001');
@@ -1643,20 +1647,22 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   }, [settings.padComboMoved, settings.controllerToggle]);
   // The plan the Premium screen starts on: monthly, or yearly when a link asks for it (?plan=year).
   const [paywallInterval, setPaywallInterval] = useState<'month' | 'year'>('month');
-  // Subscribe for everyone not on Premium (owner, Nov 15 2026), at the right end of the game-detected row under the top
-  // bar (the top bar has no room for it next to the game's name). Guests get the same Premium card, which asks them to sign in.
-  const subscribeBtn = user && userData && !userData.isPremium ? (
-    <button
-      type="button"
-      data-qc-subscribe
-      onClick={() => { playBlipSound(settings.soundEnabled); setIsPaywallOpen(true); }}
-      title={tr('prem.headerTitle')}
-      className="h-5 px-2 rounded-md bg-[var(--accent-color)] text-black hover:brightness-110 cursor-pointer flex items-center gap-1 text-[11px] font-bold whitespace-nowrap shadow-[0_0_10px_var(--accent-dim)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
-    >
-      <Sparkles className="w-3 h-3" />
-      {tr('prem.header')}
-    </button>
-  ) : null;
+  // Subscribe for everyone not on Premium (owner, Nov 15 2026) sat in the game-detected row under the top bar. That row
+  // only shows when it has something to do since the one-bar header (owner, Nov 24 2026, overlay audit): Subscribe is
+  // in the questions-left card (AnswerMeter) and the ⋯ menu's Premium, and both open this.
+  useEffect(() => {
+    const on = () => setIsPaywallOpen(true);
+    window.addEventListener('qc-open-premium', on);
+    return () => window.removeEventListener('qc-open-premium', on);
+  }, []);
+  // The quest log's Notes and Personal quests links (Nov 24 2026).
+  useEffect(() => {
+    const notes = () => setIsNotesOpen(true);
+    const quests = () => setIsQuestsOpen(true);
+    window.addEventListener('qc-open-notes', notes);
+    window.addEventListener('qc-open-quests', quests);
+    return () => { window.removeEventListener('qc-open-notes', notes); window.removeEventListener('qc-open-quests', quests); };
+  }, []);
   // Premium asked for from outside (the website's "Get Premium", the Deck's QR code: ?premium=1), or by a guest who
   // then signed in: the plan / Premium screen, after sign-in for a guest.
   useEffect(() => {
@@ -3931,7 +3937,12 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // beside it on the right.
   const companion = isCompanion();
   const logSide: 'left' | 'right' = companion ? 'right' : settings.dockPosition !== 'undocked' && tuckSide === 'left' ? 'right' : 'left';
-  const dockedLogOpen = (isDesktop && questLogAttached && questLogVisible && !!logView) || (companion && !!logView);
+  // Nothing in the log yet (no place, no steps, nothing earlier): its column stays in, and a slim "Where are you? ·
+  // Help me here" line sits over the conversation instead (owner, Nov 24 2026, overlay audit: an empty log was a third
+  // of the panel holding one button). It comes out by itself once there's something in it.
+  const logEmpty = !!logView && !logView.place?.name && !logView.now && !logView.next.length && !logView.watch && !logView.pins.length && !logView.done && !logView.here && !logView.offer && !(logView.earlier?.length) && !(logView.sessions?.length);
+  const logWaiting = isDesktop && !companion && questLogAttached && questLogVisible && logEmpty;
+  const dockedLogOpen = (isDesktop && questLogAttached && questLogVisible && !!logView && !logEmpty) || (companion && !!logView);
   // Popped out (owner, Nov 15 2026): the same log, in its own window over the game (PopWindow, electron/logWindow.cjs).
   const poppedLogOpen = isDesktop && !questLogAttached && questLogVisible && !!logView;
   // Without the docked log there's nothing to fold down to: the chat comes back.
@@ -4108,6 +4119,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           onOpenPaywall={() => setIsPaywallOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onSignIn={user?.isGuest ? openSignIn : undefined}
+          onOpenSearch={activeTab ? () => setSearchOpen((x) => !x) : undefined}
           soundEnabled={settings.soundEnabled}
           isDocked={settings.dockPosition !== 'undocked'}
           onToggleDock={() => {
@@ -4173,7 +4185,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 ) : undefined}
               />
             )}
-            {((detection.running && (!detection.open || detection.choose || detection.switched || detection.created)) || (!detection.running && detection.confirm)) && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} extra={subscribeBtn} />}
+            {detectionActionable && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
             <MigrationNotice
               spaces={spaces}
               soundEnabled={settings.soundEnabled}
@@ -4181,7 +4193,17 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
               onKeepSeparate={(gameId) => setSpaces((cur) => (cur ? splitMerged(cur, gameId) : cur))}
             />
           </>
-        ) : <DetectionLine d={detection} soundEnabled={settings.soundEnabled} extra={subscribeBtn} />)}
+        ) : detectionActionable && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} />)}
+        {logWaiting && activeTab && (
+          <div data-qc-log-waiting="" className="flex-shrink-0 h-9 flex items-center gap-2 px-3 border-b border-white/[0.06] bg-white/[0.02] text-[12.5px] text-zinc-300" style={{ WebkitAppRegion: 'no-drag' } as any}>
+            <MapPin className="w-3.5 h-3.5 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />
+            <span className="truncate">{tr('tracker.whereTitle')}</span>
+            <button type="button" data-qc-locate="" onClick={() => void runHelpHere()} title={`${tr('tracker.locate')} (${formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K')})`}
+              className="ml-auto flex-shrink-0 h-6 px-2.5 rounded-md border border-[var(--accent-border)] text-[var(--accent-color)] text-[12px] font-semibold hover:bg-[var(--accent-dim)] hover:text-white cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-white">
+              {tr('tracker.locate')}
+            </button>
+          </div>
+        )}
         {/* Updates (desktop), under the header: "Version X is ready" and, after one installs, a one-time "What's new". A dev server shows
             both with sample notes at ?previewUpdate (for screenshots). */}
         {(isDesktop || previewUpdate) && (

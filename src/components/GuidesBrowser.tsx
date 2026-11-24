@@ -204,6 +204,8 @@ export function GuidesBrowser({ active, game, steamAppId, home }: { active: bool
     if (tab && !onHome) gb.navigate(tab.id, url);
     else void openTab(url);
   };
+  // Just the guide (no web tabs): its top bar stands in for the tab row.
+  const bare = onHome && st.tabs.length === 0;
   const selectTab = (id: string | 'home') => {
     setMenu(false);
     if (id === 'home') return setOnHome(true);
@@ -330,8 +332,9 @@ export function GuidesBrowser({ active, game, steamAppId, home }: { active: bool
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* Tabs: 📖 Guide, then the web tabs. */}
-      <div role="tablist" aria-label={t('main.guide')} className="flex items-end gap-1 px-2 pt-1.5 border-b border-white/[0.08] bg-black/30 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden select-none">
+      {/* Tabs: 📖 Guide, then the web tabs. With no web tab open, no tab row: the guide's own top bar has the + (owner,
+          Nov 24 2026, overlay audit: fewer rows before the guide). */}
+      {!bare && <div role="tablist" aria-label={t('main.guide')} className="flex items-end gap-1 px-2 pt-1.5 border-b border-white/[0.08] bg-black/30 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden select-none">
         <button
           type="button"
           role="tab"
@@ -373,7 +376,7 @@ export function GuidesBrowser({ active, game, steamAppId, home }: { active: bool
         <button type="button" onClick={() => void openTab('')} className={`${btn} mb-0.5 flex-shrink-0`} aria-label={t('gb.newTab')} title={`${t('gb.newTab')} (Ctrl+T)`}>
           <Plus className="w-4 h-4" />
         </button>
-      </div>
+      </div>}
 
       {/* The toolbar, on a web tab. */}
       {!onHome && tab && (
@@ -472,7 +475,7 @@ export function GuidesBrowser({ active, game, steamAppId, home }: { active: bool
 
       {/* The page area. */}
       {onHome ? (
-        <div className="flex-1 flex flex-col min-h-0">{home}</div>
+        <div className="flex-1 flex flex-col min-h-0">{React.isValidElement(home) ? React.cloneElement(home as React.ReactElement<any>, { onNewWebTab: bare ? () => void openTab('') : undefined }) : home}</div>
       ) : !tab || !tab.url ? (
         startPage
       ) : (

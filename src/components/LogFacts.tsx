@@ -26,6 +26,8 @@ export type AreaFacts = {
 };
 
 const RARITY: [RegExp, string][] = [[/legendary|artifact|mythic|unique|exotic/i, '#f59e0b'], [/very\s*rare|epic/i, '#a855f7'], [/\brare\b/i, '#3b82f6'], [/uncommon/i, '#22c55e'], [/\bcommon\b/i, '#9ca3af']];
+/** A rarity as one short word for the quest log's rows: the last part of "Story Item / Unique", "Level 1 / Common". */
+export const shortRarity = (r: string) => (r.split('/').pop() || r).trim();
 /** A rarity's loot color ("Very Rare" purple, "Rare" blue...), or the default for a spell level and the like. */
 export const rarityColor = (r: string, fallback = '#c4b0ff') => RARITY.find(([re]) => re.test(r))?.[1] || fallback;
 
@@ -75,7 +77,7 @@ export function LogFacts(p: {
   );
   const head = (id: string, title: string, count: React.ReactNode, icon?: React.ReactNode) => (
     <button type="button" onClick={() => toggle(id)} aria-expanded={isOpen(id)} data-qc-log-section={id}
-      className="w-full flex items-center gap-2 mb-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] font-mono text-zinc-500 hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white rounded">
+      className="w-full flex items-center gap-2 mb-1.5 qc-label text-zinc-400 hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white rounded">
       {isOpen(id) ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
       {icon}{title}
       <span className="ml-auto normal-case tracking-normal font-sans font-semibold text-[11px] text-zinc-500">{count}</span>
@@ -107,11 +109,15 @@ export function LogFacts(p: {
                   ? missDot('mt-[7px]')
                   : <span className="flex-shrink-0 mt-[7px] w-1.5 h-1.5 rounded-full" style={{ background: g.rarity ? rarityColor(g.rarity) : '#71717a' }} aria-hidden="true" />}
                 <div className="min-w-0 flex-1 text-[13px] leading-snug">
+                  {/* The name, and its rarity at the row's end on one line ("Story Item / Unique" shows "Unique", the whole in
+                      its tooltip): owner, Nov 24 2026, overlay audit, rarities wrapped mid-label. */}
+                  <div className="flex items-baseline gap-2">
                   <button type="button" data-qc-item-name={g.id}
                     onMouseEnter={(e) => showSoon(g, e.currentTarget)} onMouseLeave={hideSoon}
                     onClick={(e) => { clearHover(); const r = anchorOf(e.currentTarget); const doc = e.currentTarget.ownerDocument; setCard((c) => (c?.kept && c.item.id === g.id ? null : { item: g, rect: r, kept: true, doc })); }}
-                    className="font-semibold text-white text-left hover:underline decoration-white/30 underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-white rounded cursor-pointer">{g.name}</button>
-                  {g.rarity && <span className="ml-1.5 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: rarityColor(g.rarity) }}>{g.rarity}</span>}
+                    className="min-w-0 font-semibold text-white text-left hover:underline decoration-white/30 underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-white rounded cursor-pointer">{g.name}</button>
+                  {g.rarity && <span title={g.rarity} className="ml-auto flex-shrink-0 whitespace-nowrap text-[10.5px] font-bold uppercase tracking-wide" style={{ color: rarityColor(g.rarity) }}>{shortRarity(g.rarity)}</span>}
+                  </div>
                   {/* One line per item (owner, Nov 15 2026): what it does, where and how are in its card (hover or click the name). */}
                   {(g.lost || g.lockout) && <div className="text-[11.5px] text-amber-300/90">{g.lost ? t('logfacts.goneAt', { when: g.lost }) : g.lockout}</div>}
                 </div>

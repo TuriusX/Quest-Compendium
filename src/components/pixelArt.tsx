@@ -95,7 +95,10 @@ function makePixelIcon(key: string, Fallback: LucideIcon, name: string): LucideI
     const lofi = useLofi();
     if (!lofi) return <Fallback ref={ref} {...props} />;
     // strokeWidth / absoluteStrokeWidth have no meaning for pixel art; drop them.
-    const { size = 24, color = 'currentColor', strokeWidth: _sw, absoluteStrokeWidth: _asw, className, children: _c, ...rest } = props;
+    // fill="none" (Lucide's outline, e.g. a bookmark not yet saved) would leave a pixel icon invisible: it's drawn in
+    // its colour, and only a real fill colour replaces that (Nov 24 2026 audit: the answer's Save button was blank).
+    const { size = 24, color = 'currentColor', strokeWidth: _sw, absoluteStrokeWidth: _asw, className, children: _c, fill: fillProp, ...rest } = props;
+    const fill = fillProp && fillProp !== 'none' ? fillProp : color;
     return (
       <svg
         ref={ref}
@@ -103,7 +106,7 @@ function makePixelIcon(key: string, Fallback: LucideIcon, name: string): LucideI
         width={size}
         height={size}
         viewBox="0 0 10 10"
-        fill={color}
+        fill={fill}
         shapeRendering="crispEdges"
         data-icon={key}
         aria-hidden={rest['aria-label'] ? undefined : true}

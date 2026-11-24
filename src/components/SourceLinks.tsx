@@ -19,12 +19,12 @@ export function SourceLinks({ links, skip }: { links: SourceLink[]; skip?: strin
   };
   return (
     <div data-qc-sources="" className="mt-2 flex flex-wrap items-center gap-1.5">
-      <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{t('answer.sources')}</span>
+      <span className="qc-label !text-[10.5px] text-zinc-400">{t('answer.sources')}</span>
       {shown.map((l) => (
         <a key={l.url} href={l.url} target="_blank" rel="noreferrer" onClick={(e) => open(e, l.url)} title={l.url}
           className="inline-flex items-center gap-1 max-w-[16rem] px-2 py-0.5 rounded-full border border-white/10 bg-white/[0.03] text-[11px] text-zinc-300 hover:text-white hover:border-[var(--accent-border)] hover:bg-white/[0.06]">
           <span className="truncate">{l.title}</span>
-          <span className="shrink-0 text-zinc-500">· {l.site}</span>
+          <span className="shrink-0 text-zinc-400">· {l.site}</span>
           <ExternalLink className="w-3 h-3 shrink-0 text-zinc-500" />
         </a>
       ))}

@@ -36,6 +36,9 @@ export function fetchFragment(urls: string[]): Promise<string | null> {
 }
 
 
+/** Banners shown full this session (they stay full until the app restarts). */
+const bannerFullNow = new Set<string>();
+
 const STYLE = `
   :host { display: block; color: #e4e4e7; line-height: 1.5; }
   .qc-site-only { display: none !important; }
@@ -51,6 +54,9 @@ const STYLE = `
   /* A front page's section menu sticks to the top of the panel (the site's sits under its bar). */
   .qc-ix-menu { top: 0 !important; }
   .qc-ix { margin-left: 0 !important; margin-right: 0 !important; }
+  /* The game's banner: full size the first time its guide opens here, a slim strip after (owner, Nov 24 2026, overlay
+     audit: fewer rows before the guide). */
+  .qc-seen article > div[class*="aspect-[460/215]"] { aspect-ratio: auto !important; height: 64px; }
 `;
 const ASK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>';
 const SPOT = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="m16 16-1.9-1.9"/></svg>';
@@ -100,7 +106,15 @@ export function GuideFragment({
     const el = host.current;
     if (!el || !html) return;
     const root = el.shadowRoot || el.attachShadow({ mode: 'open' });
-    root.innerHTML = `<link rel="stylesheet" href="${SITE}/assets/site.css"><style>${STYLE}</style><div class="qc-frag">${absolutize(html)}</div>`;
+    // The banner full the first time (and for the rest of that session), a strip on later visits.
+    const seenKey = `qc-guide-banner-seen:${gameKey || ''}`;
+    let seen = false;
+    try { seen = !!localStorage.getItem(seenKey) && !bannerFullNow.has(seenKey); } catch { /* private mode: always full */ }
+    root.innerHTML = `<link rel="stylesheet" href="${SITE}/assets/site.css"><style>${STYLE}</style><div class="qc-frag${seen ? ' qc-seen' : ''}">${absolutize(html)}</div>`;
+    if (!seen && root.querySelector('article > div[class*="aspect-[460/215]"]')) {
+      bannerFullNow.add(seenKey);
+      try { localStorage.setItem(seenKey, '1'); } catch { /* fine */ }
+    }
     const base = urls[0];
     const pageName = root.querySelector('h1')?.textContent?.trim() || '';
     const canSpot = typeof window !== 'undefined' && !!(window as any).electronAPI?.captureFresh;

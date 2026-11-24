@@ -153,7 +153,7 @@ export function QuestLog(p: QuestLogProps) {
       </div>
     ) : null;
   const label = (text: string, src?: React.ReactNode, amber = false) => (
-    <div className={`flex items-baseline gap-2 mb-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] font-mono ${amber ? 'text-amber-300/90' : 'text-zinc-500'}`}>
+    <div className={`flex items-baseline gap-2 mb-1.5 qc-label ${amber ? 'text-amber-300/90' : 'text-zinc-400'}`}>
       {text}
       {src}
     </div>
@@ -228,12 +228,16 @@ export function QuestLog(p: QuestLogProps) {
         <div className="px-3.5 pt-2.5">
           <div className="flex items-center gap-2 min-w-0">
             <MapPin className="w-4 h-4 flex-shrink-0 text-[var(--accent-color)]" />
+            {/* Docked beside the panel, the place is under the game's name in the top bar (owner, Nov 24 2026, overlay
+                audit: not twice); here it's the place's controls. Popped out over the game, or while locating, it says it. */}
             <div className="flex-1 min-w-0 text-[13px] leading-tight">
-              <span className="text-zinc-400">{t('tracker.youreIn')} </span>
-              <span className={`font-bold ${place.sure ? 'text-white' : 'text-zinc-300'}`}>{v.locating ? t('tracker.locating') : place.name}</span>
+              <span className={p.popped || v.locating ? '' : 'sr-only'}>
+                <span className="text-zinc-400">{t('tracker.youreIn')} </span>
+                <span className={`font-bold ${place.sure ? 'text-white' : 'text-zinc-300'}`}>{v.locating ? t('tracker.locating') : place.name}</span>
+              </span>
               {p.onPickPlace && pickNames.length > 0 && (
-                <> <span className="text-zinc-600">·</span> <button type="button" onClick={() => setPicking((x) => !x)} aria-expanded={picking}
-                  className="text-[12px] font-semibold text-[var(--accent-color)] hover:underline outline-none focus-visible:underline">{t('tracker.change')}</button></>
+                <>{(p.popped || v.locating) && <> <span className="text-zinc-600">·</span> </>}<button type="button" onClick={() => setPicking((x) => !x)} aria-expanded={picking}
+                  className="text-[12px] font-semibold text-[var(--accent-color)] hover:underline outline-none focus-visible:underline">{p.popped || v.locating ? t('tracker.change') : t('tracker.changePlace')}</button></>
               )}
             </div>
             {locateBtn(false)}
@@ -429,7 +433,7 @@ export function QuestLog(p: QuestLogProps) {
             )}
             {v.here.missables.length > 0 && !p.foldMissables && (
               <div className="mt-2 rounded-md border border-amber-300/35 bg-amber-300/[0.07] px-3 py-2">
-                <div className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] font-mono text-amber-300/90">{t('tracker.secMissable')}</div>
+                <div className="mb-1 qc-label text-amber-300/90">{t('tracker.secMissable')}</div>
                 <ul className="flex flex-col gap-1">
                   {v.here.missables.map((m) => (
                     <li key={m.id} className="flex gap-2 items-start text-[12.5px] leading-snug text-[#f3e6c8] min-w-0">
@@ -562,7 +566,7 @@ export function QuestLog(p: QuestLogProps) {
                 <div className="pb-2 flex flex-col gap-3">
                   {v.more.map((sec) => (
                     <div key={sec.id}>
-                      <div className={`text-[10.5px] font-mono font-extrabold uppercase tracking-[0.14em] mb-1 ${sec.tone === 'amber' ? 'text-amber-300/80' : 'text-zinc-500'}`}>{sec.title}</div>
+                      <div className={`qc-label mb-1 ${sec.tone === 'amber' ? 'text-amber-300/80' : 'text-zinc-400'}`}>{sec.title}</div>
                       <ul className="flex flex-col gap-0.5">
                         {/* Removed items (and ones ticked before ticks went) stay off the list. */}
                         {sec.items.filter((it) => !it.done).slice(0, 40).map((it) => (
@@ -589,6 +593,15 @@ export function QuestLog(p: QuestLogProps) {
           )}
         </div>
       </div>
+
+      {/* Notes and Personal quests (owner, Nov 24 2026, overlay audit: they were only in the game switcher's list). */}
+      {!p.popped && !isCompanion() && (
+        <div data-qc-log-links="" className="flex items-center gap-3 px-3.5 py-2 border-t border-white/[0.07] text-[12px]">
+          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('qc-open-notes'))} className="text-zinc-300 hover:text-white underline-offset-2 hover:underline outline-none focus-visible:ring-2 focus-visible:ring-white rounded">{t('log.notes')}</button>
+          <span className="text-zinc-600" aria-hidden="true">·</span>
+          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('qc-open-quests'))} className="text-zinc-300 hover:text-white underline-offset-2 hover:underline outline-none focus-visible:ring-2 focus-visible:ring-white rounded">{t('side.menuQuests')}</button>
+        </div>
+      )}
 
       {/* The keys, one line. */}
       {!isCompanion() && <div data-qc-keyhints="" className="flex flex-wrap gap-x-2.5 gap-y-1 px-3.5 py-2 border-t border-white/[0.07] bg-black/20 font-mono text-[10.5px] text-zinc-500">

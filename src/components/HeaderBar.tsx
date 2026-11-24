@@ -7,7 +7,8 @@ import {
   Square,
   RefreshCw,
   LogIn,
-  MessageSquareText
+  MessageSquareText,
+  Search
 } from './icons';
 import { PWAInstallButton } from './PWAInstallButton';
 import { usePWAInstall } from '../hooks/usePWAInstall';
@@ -45,6 +46,8 @@ interface HeaderBarProps {
   onOpenSettings?: () => void;
   /** Guests: a small Sign in button. */
   onSignIn?: () => void;
+  /** Find an answer (Ctrl+F): in the ⋯ menu since the one-bar header (owner, Nov 24 2026). */
+  onOpenSearch?: () => void;
   soundEnabled: boolean;
   isDocked: boolean;
   onToggleDock: () => void;
@@ -98,6 +101,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onOpenPaywall,
   onOpenSettings,
   onSignIn,
+  onOpenSearch,
   soundEnabled,
   isDocked,
   onToggleDock,
@@ -146,7 +150,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const menuItem = 'w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer';
 
   return (
-    <header className="qc-stars min-h-[60px] py-1 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center gap-2 px-2.5 sm:px-3 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
+    <header className="qc-stars min-h-[56px] py-1 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center gap-2 px-2.5 sm:px-3 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
       {/* The logo is the quest log's switch (desktop): a closed book while the log is away, open while it's out. */}
       {onToggleQuestLog && (
         <LogBook
@@ -183,10 +187,15 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
       {/* Right controls */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        {/* Pro / Fast (ModelToggle, drawn here by the chat area, which keeps the choice) */}
+        {/* Ask | Guides (and search), drawn here by the chat area, which keeps the choice (owner, Nov 24 2026, overlay
+            audit: one bar instead of the header, the detection line and the tab row). */}
+        <div id="qc-view-slot" className="flex items-center empty:hidden mr-0.5" style={{ WebkitAppRegion: 'no-drag' } as any} />
+        {/* The questions left (AnswerMeter, drawn here by the chat area) */}
         <div id="qc-model-slot" className="flex items-center empty:hidden mr-0.5" />
+        {/* Sign in (guests), until the questions pill shows: then it's "3 left · Sign in" (index.css hides this). */}
         {onSignIn && (
           <button
+            data-qc-header-signin=""
             style={{ WebkitAppRegion: "no-drag" } as any}
             onClick={() => {
               playBlipSound(soundEnabled);
@@ -255,6 +264,13 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     <ScrollText className="w-4 h-4 text-[var(--accent-color)]" />
                     <span className="flex-1">{questLogVisible ? t('menu.questLogHide') : t('menu.questLogShow')}</span>
                     {questLogKeys && <span className="text-[10px] text-zinc-500 font-mono">{questLogKeys}</span>}
+                  </button>
+                )}
+                {onOpenSearch && (
+                  <button type="button" role="menuitem" data-qc-open-search="" onClick={pick(() => { playBlipSound(soundEnabled); onOpenSearch(); })} className={menuItem}>
+                    <Search className="w-4 h-4 text-zinc-400" />
+                    <span className="flex-1">{t('search.menu')}</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">Ctrl+F</span>
                   </button>
                 )}
                 {activeGame && (
@@ -367,10 +383,10 @@ const LogBook: React.FC<{ open: boolean; ready: boolean; peek?: { now?: string; 
         aria-pressed={open}
         aria-label={label}
         title={ready ? `${label}${keys ? ` (${keys})` : ''}` : t('header.questLogEmpty')}
-        className={`relative w-11 h-11 rounded-lg flex items-center justify-center border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white ${open ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] shadow-[0_0_14px_var(--accent-glow)]' : 'border-transparent hover:bg-white/[0.06] hover:border-[var(--accent-border)]'} ${ready ? 'cursor-pointer' : 'opacity-50 cursor-default'}`}
+        className={`relative w-10 h-10 rounded-lg flex items-center justify-center border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white ${open ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] shadow-[0_0_14px_var(--accent-glow)]' : 'border-transparent hover:bg-white/[0.06] hover:border-[var(--accent-border)]'} ${ready ? 'cursor-pointer' : 'opacity-50 cursor-default'}`}
       >
         <span key={flip} className={flip ? 'qc-book-flip' : undefined}>
-          {open ? <QuestLogoOpen size={32} /> : <QuestLogo size={32} compact />}
+          {open ? <QuestLogoOpen size={30} /> : <QuestLogo size={30} compact />}
         </span>
         {!open && ready && !!peek?.steps && (
           <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[var(--accent-color)] text-black text-[10px] font-black tabular-nums flex items-center justify-center shadow-[0_0_0_2px_#0a0b10]" aria-hidden="true">{peek.steps > 9 ? '9+' : peek.steps}</span>

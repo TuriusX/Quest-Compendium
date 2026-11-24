@@ -290,6 +290,12 @@ html.qc-pad [data-qc-pad-focus] {
   position: relative;
   z-index: 5;
 }
+/* A focused answer is usually taller than the view, so its outline's top and bottom are off screen: the answer itself
+   lights up too (owner, Nov 24 2026, overlay audit: hard to see from a sofa). */
+html.qc-pad [data-qc-pad-focus] [data-qc-answer-card] {
+  border-color: var(--accent-color) !important; border-width: 2px !important;
+  background-image: linear-gradient(var(--accent-dim), var(--accent-dim)) !important;
+}
 html.qc-pad * { cursor: none !important; }
 /* Keyboard hints mean nothing on a controller (the prompt bar says what the buttons do). */
 html.qc-pad [data-qc-keyhints] { display: none !important; }
@@ -302,6 +308,26 @@ html.qc-pad [data-qc-tabs]::before, html.qc-pad [data-qc-tabs]::after {
   align-self: center; margin: 0 8px; padding: 2px 6px; border-radius: 5px; background: #3f3f46; color: #f4f4f5;
   font: 800 10px/1.2 ui-monospace, monospace;
 }
+/* Small section labels in plain type (owner, Nov 24 2026, overlay audit: the 10.5px pixel labels were the hardest text
+   to read). The pixel faces stay for titles. */
+.qc-label, html[data-ui="lofi"] .qc-label {
+  font-family: 'Segoe UI', system-ui, sans-serif !important;
+  font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em !important; line-height: 1.3;
+}
+/* One Undo for a new objective (owner, Nov 24 2026, overlay audit): with the quest log docked beside the chat, its own
+   "Now, from your question · Undo" is the one; the Undo under the answer stays when the log is away or popped out. */
+body:has([data-qc-log]) [data-qc-scroll] [data-qc-now-undo] { display: none; }
+/* A new game's "Where are you? · Help me here" line under the top bar says it: the top bar doesn't say it too (Nov 24 2026). */
+body:has([data-qc-log-waiting]) [data-qc-noplace] { display: none; }
+/* The quest log's keys line only while it has the keyboard (it's for using the log without a mouse). */
+[data-qc-log]:not(:focus-within) [data-qc-keyhints] { display: none; }
+/* The one-bar header (Nov 24 2026): a guest's Sign in is part of the questions pill once that shows ("3 left · Sign in"). */
+#qc-model-slot:has([data-qc-meter]) ~ [data-qc-header-signin] { display: none; }
+/* The switch in the top bar (one-bar header, Nov 24 2026): the badges sit just inside its ends. */
+html.qc-pad [data-qc-tabs].qc-viewseg::before, html.qc-pad [data-qc-tabs].qc-viewseg::after { margin: 0 1px; padding: 1px 3px; font-size: 8.5px; }
+/* With a controller the top bar's Hide button makes way for those badges (the game's name keeps its room): holding B
+   does the same, and the controller can't click it anyway. */
+html.qc-pad [data-qc-hide-all] { display: none; }
 html.qc-pad [data-qc-tabs]::before { content: var(--qc-g-lb, "LB"); }
 html.qc-pad [data-qc-tabs]::after { content: var(--qc-g-rb, "RB"); }
 /* Bigger targets for a controller. */

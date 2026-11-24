@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Check, ChevronDown, ChevronRight, ArrowLeft, Gem, Skull, Sparkles, TriangleAlert, MapPin, Play, MessageCircleQuestion, ScanSearch } from './icons';
+import { BookOpen, Check, ChevronDown, ChevronRight, ArrowLeft, Gem, Skull, Sparkles, TriangleAlert, MapPin, Play, MessageCircleQuestion, ScanSearch, Plus } from './icons';
 import { SPOT_EVENT } from '../utils/spotIt';
 import { guideApi } from '../utils/guideApi';
 import { orderGuides, readRecentGuides, rememberGuideOpened, useGuideIndex, type GuideIndexGame, type GuideSort } from '../utils/guideIndex';
@@ -89,6 +89,7 @@ export function QcGuidesView({
   onAsk,
   openRequest,
   achievements,
+  onNewWebTab,
 }: {
   gameName?: string;
   /** The Steam app id and the compendium's own name: they find the guide when Steam's name doesn't (guidesApi.ts). */
@@ -102,6 +103,8 @@ export function QcGuidesView({
   openRequest?: { slug: string; entry?: string; entity?: boolean; n: number } | null;
   /** The player's Steam achievements (unlocked or not), for "Achievements here". */
   achievements?: Achievement[];
+  /** No web tabs open (GuidesBrowser): this top bar has the + for one, in place of the tab row. */
+  onNewWebTab?: () => void;
 }) {
   const t = useT();
   guideLang = useLocale();
@@ -188,6 +191,12 @@ export function QcGuidesView({
           >
             <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="truncate">{t('qcg.youreIn', { place: hereArea.name })}</span>
+          </button>
+        )}
+        {onNewWebTab && (
+          <button type="button" onClick={onNewWebTab} aria-label={t('gb.newTab')} title={`${t('gb.newTab')} (Ctrl+T)`}
+            className={`${showJump && hereArea && guide ? '' : 'ml-auto'} h-7 w-7 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.08] flex items-center justify-center cursor-pointer flex-shrink-0`}>
+            <Plus className="w-4 h-4" />
           </button>
         )}
       </div>
@@ -322,10 +331,10 @@ const initialsOf = (game: string) =>
     .join('') || '?';
 
 /** A game's store art at Steam's header shape (460×215), with a placeholder underneath if there's none or it fails. */
-function GameArt({ game, art, className = '' }: { game: string; art?: string; className?: string }) {
+function GameArt({ game, art, className = '', strip = false }: { game: string; art?: string; className?: string; strip?: boolean }) {
   const [failed, setFailed] = useState(false);
   return (
-    <div className={`relative aspect-[460/215] overflow-hidden bg-[#0c0d14] ${className}`}>
+    <div className={`relative ${strip ? 'h-16' : 'aspect-[460/215]'} overflow-hidden bg-[#0c0d14] ${className}`}>
       <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[var(--accent-dim)] via-[#1a1530] to-[#0c0d14]">
         <span className="font-bold text-white/80 tracking-wide text-base">{initialsOf(game)}</span>
       </div>
@@ -494,6 +503,10 @@ function AreaList({
   const [q, setQ] = useState('');
   // A tapped "coming soon" entry shows the words for a moment (no hover on a touch screen or with a controller).
   const [soonTap, setSoonTap] = useState('');
+  // The game's big banner the first time its guide opens, a slim strip after (owner, Nov 24 2026, overlay audit: fewer
+  // rows before the guide).
+  const [bannerFull] = useState(() => !ls.get(`qc-guide-art-seen:${gameKey}`));
+  useEffect(() => { if (s.data) ls.set(`qc-guide-art-seen:${gameKey}`, '1'); }, [gameKey, s.data]);
   if (s.loading) return <Note>{t('qcg.loading')}</Note>;
   if (s.error || !s.data) return <Note>{t('qcg.none')}</Note>;
   const needle = fold(q.trim());
@@ -515,7 +528,7 @@ function AreaList({
   );
   return (
     <div className="space-y-2">
-      {!needle && <GameArt game={s.data.game} art={s.data.art} className="rounded-xl border border-white/10 mb-1" />}
+      {!needle && <GameArt game={s.data.game} art={s.data.art} strip={!bannerFull} className="rounded-xl border border-white/10 mb-1" />}
       <GuideSearch gameKey={gameKey} value={q} onChange={setQ} onPick={onHit} />
       {!needle && ach && onAchievements && (
         <button type="button" className={`${rowCls} !border-amber-500/30 !bg-amber-500/[0.07] hover:!bg-amber-500/[0.12]`} onClick={onAchievements}>

@@ -125,21 +125,23 @@ export function GameSwitcher({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`${name}${placeName ? `, ${placeName}` : ''}: ${t('spaces.openGames')}`}
-        title={isGameRunningLocally ? t('header.playing', { game: activeGame?.name ?? '' }) : name}
-        className={`max-w-full min-w-0 flex items-center gap-2.5 p-1 pr-2 rounded-lg text-left cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
+        title={isGameRunningLocally ? `${name} · ${t('header.playing', { game: activeGame?.name ?? '' })}` : `${name}${active && !runningName && detection?.available ? ` · ${t('header.noGame')}` : ''}`}
+        className={`max-w-full min-w-0 flex items-center gap-2 p-1 pr-1.5 rounded-lg text-left cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
           open ? 'bg-white/[0.08]' : tabs.length === 0 ? 'bg-[var(--accent-dim)] animate-pulse' : 'hover:bg-white/[0.06]'
         }`}
       >
-        {active ? coverOf(active, 'w-[42px] h-[42px]', 'w-2.5 h-2.5') : <span className="flex-shrink-0 w-[42px] h-[42px] rounded-md border border-[var(--accent-border)] grid place-items-center"><Plus className="w-5 h-5 text-[var(--accent-color)]" /></span>}
+        {active ? coverOf(active, 'w-[34px] h-[34px]', 'w-2.5 h-2.5') : <span className="flex-shrink-0 w-[34px] h-[34px] rounded-md border border-[var(--accent-border)] grid place-items-center"><Plus className="w-5 h-5 text-[var(--accent-color)]" /></span>}
         <span className="min-w-0 flex flex-col gap-0.5">
           <span className="min-w-0 flex items-center gap-1.5">
-            <span className="min-w-0 text-[14.5px] font-bold leading-[1.2] text-white break-words line-clamp-2">{name}</span>
+            {/* One line, cut with … (owner, Nov 24 2026, overlay audit: it wrapped onto two lines as soon as the questions
+                pill showed); the full name is the button's tooltip. */}
+            <span className="min-w-0 text-[14px] font-bold leading-[1.2] text-white truncate">{name}</span>
             <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true" className={`flex-shrink-0 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`}>
               <path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" />
             </svg>
           </span>
           {active && (
-            <span className={`min-w-0 flex items-center gap-1 text-[12px] leading-[1.2] ${placeName ? 'text-zinc-300' : 'text-zinc-500'}`}>
+            <span {...(placeName ? {} : { 'data-qc-noplace': '' })} className={`min-w-0 flex items-center gap-1 text-[12px] leading-[1.2] ${placeName ? 'text-zinc-300' : 'text-zinc-500'}`}>
               <MapPin className="w-3 h-3 flex-shrink-0 text-[var(--accent-color)]" aria-hidden="true" />
               <span className="truncate">{placeName || t('strip.noPlaceShort')}</span>
             </span>

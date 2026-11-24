@@ -1162,11 +1162,11 @@ export function ControllerLayer({
               [['↕'], 'pad.introMove'],
               [['lb', 'rb'], 'pad.introPanels'],
               [['menu'], 'pad.introMenu'],
-              [['b'], 'pad.introBack'],
-              ...(desktop ? [[['b'], 'pad.introHold'] as [string[], string]] : []),
+              // One B row (owner, Nov 24 2026, overlay audit): tap goes back, hold goes back to the game (desktop).
+              [['b'], desktop ? 'pad.introBackHold' : 'pad.introBack'],
             ] as [string[], string][]).map(([keys, label]) => (
               <div key={label} className="flex items-center gap-3 text-[13px] text-zinc-200">
-                <span className="flex items-center gap-1 w-20 flex-shrink-0">{keys.map((k) => <Glyph key={k} b={k} />)}</span>
+                <span className="flex items-center gap-1 w-14 flex-shrink-0">{keys.map((k) => <Glyph key={k} b={k} />)}</span>
                 <span>{t(label)}</span>
               </div>
             ))}

@@ -461,6 +461,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Pro / Fast is drawn in the top bar's slot (owner, Nov 6 2026); where there's no top bar, by the send button as before.
   const [modelSlot, setModelSlot] = useState<HTMLElement | null>(null);
   useEffect(() => { setModelSlot(document.getElementById('qc-model-slot')); }, []);
+  // Ask | Guides (and search) as a small switch in the top bar (owner, Nov 24 2026, overlay audit: one bar instead of
+  // three); where there's no top bar, the full-width row as before.
+  const [viewSlot, setViewSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => { setViewSlot(document.getElementById('qc-view-slot')); }, []);
   const preferredModel: 'pro' | 'flash' = answerModel === 'fast' ? 'flash' : 'pro';
   // Switching between the server's two models is silent (owner, Nov 22 2026): players only see questions left.
   const noteSwitch = (_to: AnswerModel) => {};
@@ -1444,7 +1448,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           };
           return (
             <div className="relative mb-2 flex items-center gap-1.5">
-              <div role="group" aria-label={t('quick.label')} className="flex-1 min-w-0 flex flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div role="group" aria-label={t('quick.label')} className="min-w-0 flex flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {shown.map((id) => (
                   <button
                     key={id}
@@ -1452,7 +1456,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     data-pad-stop="quick"
                     disabled={isLoading}
                     onClick={() => ask(id)}
-                    className="qc-px-frame shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11.5px] font-medium text-zinc-300 hover:text-white hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default"
+                    className="shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11.5px] font-medium text-zinc-300 hover:text-white hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default"
                   >
                     {t(quickLabelKey(id))}
                   </button>
@@ -1469,7 +1473,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   playBlipSound(soundEnabled);
                   setShowMoreQuick((v) => !v);
                 }}
-                className="qc-px-frame shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full border border-[var(--accent-border)] text-[11.5px] font-semibold text-[var(--accent-color)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-default"
+                className="shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full border border-[var(--accent-border)] text-[11.5px] font-semibold text-[var(--accent-color)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-default"
               >
                 {t('quick.more')}
                 <ChevronDown className={`w-3 h-3 transition-transform ${showMoreQuick ? '' : 'rotate-180'}`} />
@@ -1596,7 +1600,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
             {/* Pro / Fast: in the top bar, or here when there's none */}
             {(() => {
-              const toggle = <AnswerMeter balances={bal} quota={quota} />;
+              const toggle = <AnswerMeter balances={bal} quota={quota} guest={isGuest} onSignIn={onSignIn} />;
               return modelSlot ? createPortal(toggle, modelSlot) : toggle;
             })()}
 
@@ -1632,7 +1636,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         {(() => {
           const note = modelNote || (firstRunHint && !isCompanion() ? (isDesktopApp ? t('chat.hintDesktop') : t('chat.hintWeb')) : '');
           return (
-            <div role="status" aria-live="polite" className={`${note ? 'mt-2' : ''} text-center text-[10px] font-mono uppercase ${modelNote ? 'text-[var(--accent-color)]' : 'text-zinc-500'}`}>
+            <div role="status" aria-live="polite" {...(!modelNote ? { 'data-qc-keyhints': '' } : {})} className={`${note ? 'mt-2' : ''} text-center text-[12px] ${modelNote ? 'text-[var(--accent-color)]' : 'text-zinc-400'}`}>
               {note}
             </div>
           );
@@ -1642,7 +1646,27 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-[#0d0e14] via-[#090a0f] to-[#07070b] relative crt-grid">
-      {activeTab && (
+      {/* (Find an answer is in the top bar's ⋯ menu and on Ctrl+F when the switch is up there: no room for its icon.) */}
+      {activeTab && viewSlot && createPortal(
+        <div role="tablist" data-qc-tabs="" aria-label={t('main.modeLabel')} title={t('main.modeHint')} className="qc-viewseg flex items-center p-[3px] rounded-lg bg-white/[0.05] border border-white/[0.08]">
+          {(['ask', 'guide'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={mode === m}
+              onClick={() => setMode(m)}
+              className={`h-[26px] px-2 rounded-md text-[12.5px] font-semibold whitespace-nowrap transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                mode === m ? 'bg-[var(--accent-dim)] text-white shadow-[inset_0_0_0_1px_var(--accent-border)]' : 'text-zinc-400 hover:text-zinc-100'
+              }`}
+            >
+              {t(m === 'ask' ? 'main.ask' : 'main.guide')}
+            </button>
+          ))}
+        </div>,
+        viewSlot,
+      )}
+      {activeTab && !viewSlot && (
         <div className="flex-shrink-0 h-10 flex items-stretch min-w-0 border-b border-white/[0.08] bg-black/15">
           {/* Ask | Guide, the full width (owner, Nov 5 2026) */}
           <div role="tablist" data-qc-tabs="" aria-label={t('main.modeLabel')} className="flex-1 min-w-0 flex items-stretch" title={t('main.modeHint')}>
@@ -1835,44 +1859,28 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 {...(!isUser ? { 'data-pad-stop': 'answer', tabIndex: -1 } : {})}
                 className={`group/msg flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-full`}
               >
-                {/* User or AI Message Header Tag */}
-                <div className={`flex items-center gap-2 mb-1 text-[11px] font-mono ${isUser ? 'text-zinc-400 justify-end' : 'text-zinc-400'}`}>
-                  {msg.aside && (
-                    <span className="px-1.5 py-px rounded-full border border-[var(--accent-color)]/40 text-[var(--accent-color)] font-sans font-semibold text-[10.5px]">
+                {/* A side question's game, over its answer. (The question's PLAYER label, avatar and time, and the
+                    answer's model and time line went with answers as pages, owner Nov 24 2026, overlay audit: the
+                    question is a slim line, and the model and time are on the answer's bottom row.) */}
+                {msg.aside && (
+                  <div className={`flex items-center gap-2 mb-1 ${isUser ? 'justify-end' : ''}`}>
+                    <span className="px-1.5 py-px rounded-full border border-[var(--accent-color)]/40 text-[var(--accent-color)] font-semibold text-[10.5px]">
                       {t('aside.about', { game: msg.aside })}
                     </span>
-                  )}
-                  {isUser ? (
-                    <>
-                      <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      <span className="font-semibold text-zinc-300 uppercase">{steamName || 'PLAYER'}</span>
-                      {steamAvatar ? (
-                        <img src={steamAvatar} alt={steamName || 'Player'} className="w-5 h-5 rounded-full border border-white/20" />
-                      ) : (
-                        <div className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-zinc-300">
-                          <User className="w-3 h-3" />
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    // One small grey line: "Fast · 10:38" (there's only one speaker; Spot it says so)
-                    <span className="text-zinc-500 font-sans">
-                      {[
-                        msg.kind === 'spot' || msg.kind === 'help' ? msg.modelUsed : modelLabel(msg.modelUsed),
-                        new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                      ].filter(Boolean).join(' · ')}
-                    </span>
-                  )}
-                </div>
+                  </div>
+                )}
 
-                {/* Message Bubble Card */}
+                {/* Message Bubble Card: the question a slim line, the answer a full-width page */}
                 <div
-                  className={`relative rounded-2xl p-4 max-w-[94%] sm:max-w-[88%] transition-all ${
+                  {...(!isUser ? { 'data-qc-answer-card': '' } : {})}
+                  title={isUser ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined}
+                  className={`relative transition-all ${
                     isUser
-                      ? 'bg-gradient-to-br from-[#1a1528] to-[#120f1c] border border-[var(--accent-border)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)]'
-                      : 'bg-[#11121a]/95 border border-white/[0.08] text-zinc-200 shadow-[0_6px_25px_rgba(0,0,0,0.5)]'
+                      ? 'w-full rounded-lg pl-3.5 pr-3 py-2 border-l-2 border-[var(--accent-color)] bg-white/[0.03] text-white text-[14px]'
+                      : 'w-full flex flex-col rounded-2xl p-4 bg-[#11121a]/95 border border-white/[0.08] text-zinc-200 shadow-[0_6px_25px_rgba(0,0,0,0.5)]'
                   }`}
                 >
+                  {isUser && <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 mb-0.5">{t('chat.youAsked')}</div>}
                   {!isUser && msg.collapsed ? (
                     <div className="flex items-center gap-2 text-xs text-zinc-400">
                       <Flag className="w-3.5 h-3.5 text-rose-300 shrink-0" aria-hidden="true" />
@@ -1886,6 +1894,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       </button>
                     </div>
                   ) : (<>
+                  {/* The answer's title (the server's short name for it, as the quest log uses) over a longer answer that
+                      doesn't start with its own heading (owner, Nov 24 2026, answers as pages). */}
+                  {!isUser && msg.title && msg.text.length > 400 && !/^\s*#/.test(msg.text) && (
+                    <h3 className="font-fantasy font-bold text-[19px] leading-tight text-white mb-2 text-balance">{msg.title}</h3>
+                  )}
                   {!isUser && msg.bannerImageUrl && (
                     <div 
                       onClick={() => onOpenScreenModal(msg.bannerImageUrl!)}
@@ -2019,7 +2032,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     const steps = (msg.steps || []).map((st, i) => ({ st, i })).filter((x) => x.st.kind !== 'warning');
                     if (questLog?.now === msg.id && steps.length) {
                       return (
-                        <div className="mt-2 flex items-center gap-1.5 text-[12px] font-mono text-zinc-500">
+                        <div className="mt-2 flex items-center gap-1.5 text-[12px] text-zinc-400">
                           <span className="w-2 h-2 rounded-full border border-[var(--accent-color)] bg-[var(--accent-dim)]" />
                           {t('tracker.logCurrentPlain')}
                           {nowUndo?.msgId === msg.id && (
@@ -2056,14 +2069,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     );
                   })()}
 
-                  {/* Answer actions: a small bar on the answer's bottom edge, shown on hover or keyboard / controller
-                      focus (always on touch screens), and kept while reading aloud, just copied or saved, or asking
-                      what was wrong after a 👎. It takes no room in the answer. */}
-                  {!isUser && (
-                    <div className={`absolute -bottom-4 right-3 z-10 text-xs text-zinc-400 transition-opacity duration-150 focus-within:opacity-100 ${
-                      isAudioPlaying || isNoteSaved || copiedMessageId === msg.id || voteAsk === msg.id || actionMenu === msg.id ? '' : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/msg:opacity-100'
-                    }`}>
-                      <div className="flex items-center gap-0.5 p-0.5 rounded-xl bg-[#171822] border border-white/[0.12] shadow-[0_4px_14px_rgba(0,0,0,0.55)]">
+                  {/* Answer actions: the answer's bottom row, always showing (owner, Nov 24 2026, overlay audit: they only
+                      appeared on hover, so 👍 👎 and Save went unseen), with the model and time on its left ("Gemini 4
+                      Hydrogen (low) · 10:38", owner Nov 22 2026: show which model answered). Not on the app's own
+                      welcome line. */}
+                  {!isUser && msg.modelUsed !== 'app' && (
+                    <div className="order-last mt-3 pt-2 border-t border-white/[0.06] flex items-center gap-2 text-xs text-zinc-400">
+                      <span className="min-w-0 truncate text-[11px] text-zinc-400">
+                        {[
+                          msg.kind === 'spot' || msg.kind === 'help' ? msg.modelUsed : modelLabel(msg.modelUsed),
+                          new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        ].filter(Boolean).join(' · ')}
+                      </span>
+                      <div className="ml-auto flex-shrink-0 flex items-center gap-0.5">
                         {/* Audio TTS button with animated wave indicator / stop control */}
                         <button
                           onClick={() => handlePlayTTS(msg.id, msg.text)}
