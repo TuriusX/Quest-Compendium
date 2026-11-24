@@ -5,9 +5,7 @@ import express from 'express';
 
 const logDebug = (...args: any[]) => {};
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold, ThinkingLevel } from '@google/genai';
-import { logBanner, logUsage, logTranscribe, withOutputCap, maybeBilledFailure, worstCaseDollars, requestCost } from './usage';
-import { openaiAnswer, openaiReady, openaiUnavailable, OPENAI_TRANSCRIBE_MODEL } from './openaiAnswer';
-import { openaiFor, openaiGenerate } from './openaiGemini';
+import { logBanner, logUsage, withOutputCap, maybeBilledFailure, worstCaseDollars, requestCost } from './usage';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
 import { initializeApp, getApp } from 'firebase-admin/app';
@@ -36,8 +34,8 @@ import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor, gameForTab, baseGameKey } from './guidesApi';
 import { gameFromQuestion } from './gameFromQuestion';
-import { routing, takePlayerPro, PRO_CHAT_MODEL, openaiModelFor, openaiSiteModel } from './chatRouting';
-import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL, QUICK_LOOKUP_RULE, VOICE_RULE, splitPerQuestion } from './searchPolicy';
+import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
+import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL, VOICE_RULE, splitPerQuestion } from './searchPolicy';
 import { asksWhatNext } from './src/utils/whatNext';
 import { isSimpleLookup } from './src/utils/simpleLookup';
 import { readSaveState, writeSaveState } from './saveStateStore';
@@ -288,35 +286,10 @@ function getGeminiClient(): GoogleGenAI {
 }
 
 /**
- * The client for the server's helper calls (pop-up summaries, visual answers, Locate me, Spot it, place reading, drawn
- * answers): with config/chatRouting.openaiHelpers on, each Gemini request OpenAI can answer goes to OpenAI
- * (openaiGemini.ts, a Gemini-shaped reply); video by link, images out and the rest stay on Gemini, and an overloaded
- * OpenAI hands the call back to Gemini.
+ * The client for the server's helper calls (visual answers, Locate me, Spot it, place reading, drawn answers): Gemini.
+ * (The OpenAI route, off since Nov 23 2026, was removed Nov 24: the app and website run on Gemini only.)
  */
-let helpersOnOpenAI = false;
-function getHelperClient(): GoogleGenAI {
-  void routing().then((r) => { helpersOnOpenAI = r.openaiHelpers; }).catch(() => {});
-  const g = getGeminiClient();
-  if (!helpersOnOpenAI || !openaiReady()) return g;
-  const generate = g.models.generateContent.bind(g.models);
-  const models = Object.create(g.models);
-  models.generateContent = async (request: any) => {
-    // Flash-Lite's quick looks stay on Gemini: a player waits on them, and gpt-6-luna takes 2-4 s where Flash-Lite
-    // takes under 1 (and without thinking luna misreads places; Nov 19 2026 test on the Elden Ring screenshot).
-    const m = /flash-lite/i.test(String(request?.model || '')) ? '' : openaiFor(request);
-    if (!m) return generate(request);
-    try {
-      return await openaiGenerate(request, m);
-    } catch (e: any) {
-      if (!openaiUnavailable(e)) throw e;
-      console.log(`[helper-openai] ${m} unavailable (${e?.status || ''}): Gemini answers`);
-      return generate(request);
-    }
-  };
-  const client = Object.create(g);
-  client.models = models;
-  return client;
-}
+const getHelperClient = (): GoogleGenAI => getGeminiClient();
 
 async function startServer() {
   const app = express();
@@ -1781,8 +1754,8 @@ percentages:
       // Fast in the app (Flash, for players with full access; Flash-Lite for the rest is unchanged) gets the same rules, search from the first
       // try and guide lines as Pro, thinking low (owner, Nov 5 2026: 12 test questions, 5 wrong claims against 6, median 14 s against 27).
       // The app's faster answers on Gemini 4 Hydrogen (owner, Nov 22 2026: config/chatRouting geminiFast), for every player.
-      // The website too when its OpenAI switch is off (owner, Nov 22 2026: one voice everywhere, config/chatRouting openaiSite false).
-      const appFastModel = !site || !routingCfg.openaiSite ? routingCfg.geminiFast || '' : '';
+      // The website too (owner, Nov 22 2026: one voice everywhere).
+      const appFastModel = routingCfg.geminiFast || '';
       const siteHydrogen = !!site && !!appFastModel;
       if (appFastModel && !usePro) targetModel = appFastModel;
       const fastApp = !site && !usePro && (targetModel === MAIN_MODEL || (!!appFastModel && targetModel === appFastModel));
@@ -2023,8 +1996,6 @@ percentages:
       const nameOf = (m: string) => GEMINI_NAMES[m] || m;
       // Shown under the answer (owner, Nov 22 2026): which model and, for Hydrogen, how much it thought ("(medium)", "(low)").
       let modelUsed = targetModel === FREE_MODEL ? 'Gemini Flash-Lite' : appFastModel && targetModel === appFastModel ? `${nameOf(targetModel)} (${routingCfg.geminiFastThinking || 'low'})` : nameOf(targetModel);
-      // The OpenAI model that answered ('' for Gemini): its own marker step below.
-      let oaAnswered = '';
       // First attempts given up on: billed, but never reported back (the website's dollars a day count them).
       let abandoned = 0;
       const modelStartedAt = Date.now();
@@ -2073,14 +2044,7 @@ percentages:
           // Thinking: low as before, unless config/chatRouting sets it (Hydrogen medium for questions, Nov 22 2026).
           const THINK = { low: ThinkingLevel.LOW, medium: ThinkingLevel.MEDIUM, high: ThinkingLevel.HIGH };
           const thinkLevel = usePro ? THINK[routingCfg.geminiProThinking || 'low'] : appFastModel && targetModel === appFastModel ? THINK[routingCfg.geminiFastThinking || 'low'] : ThinkingLevel.LOW;
-          // OpenAI answers (openaiAnswer.ts; config/chatRouting openaiPro / openaiFast, for a share of players): the app's
-          // Pro and Fast, not the website (yet). Gemini answers instead when OpenAI is down or overloaded.
-          const oaOwner = isOwnerEmail(typeof (req as any).user?.email === 'string' ? String((req as any).user.email).trim().toLowerCase() : null);
-          // A lookup answered as a quick answer: the best model, thinking minimally ("sol lite"), not the quick model.
-          const liteLookup = lookup && !usePro && !overCap && openaiReady() && !evalCapture ? openaiModelFor(routingCfg, { pro: true, uid: String(userId || ''), owner: oaOwner }) : '';
-          const oaModel = liteLookup || (site ? (openaiReady() && !evalCapture ? openaiSiteModel(routingCfg, usePro) : '') : (usePro || fastApp) && openaiReady() && !evalCapture ? openaiModelFor(routingCfg, { pro: usePro, uid: String(userId || ''), owner: oaOwner }) : '');
-          const heard: { text?: string; seconds?: number } = {};
-          const modelOf = (r: any) => (typeof r?.model === 'string' && /^gpt-/i.test(r.model) ? r.model : answerModel);
+          const modelOf = (_r: any) => answerModel;
           const geminiCall = (sys: string, withSearch: boolean): Promise<any> => ai.models.generateContent(answerParams(sys, withSearch));
           const answerParams = (sys: string, withSearch: boolean) => ({
             model: answerModel,
@@ -2101,26 +2065,7 @@ percentages:
             }
           });
           const answerCall = (sys: string, withSearch: boolean): Promise<any> => {
-            if (oaModel) {
-              // The website shows it as it's written: only the attempt running now may reach the page.
-              const mine = site?.stream ? ++attempt : 0;
-              if (mine > 1) site!.stream!({ reset: true });
-              const onText = site?.stream ? (all: string) => { if (mine === attempt) site.stream!({ raw: all }); } : undefined;
-              return openaiAnswer(liteLookup
-                ? { model: oaModel, system: `${sys}\n\n${QUICK_LOOKUP_RULE}`, contents: contentsPayload, withSearch, effort: 'minimal', maxToolCalls: 1, maxOutputTokens: 2500, heard, onText }
-                : { model: oaModel, system: sys, contents: contentsPayload, withSearch, effort: 'low', maxOutputTokens: 16000, heard, onText })
-                .then((r) => { logTranscribe('chat-voice', OPENAI_TRANSCRIBE_MODEL, r.audioSeconds); return r; })
-                .catch((e: any) => {
-                  if (!openaiUnavailable(e)) throw e;
-                  console.log(`[chat-openai] ${oaModel} unavailable (${e?.status || ''} ${String(e?.message || '').slice(0, 80)}): Gemini answers`);
-                  if (site?.stream) {
-                    const again = ++attempt;
-                    site.stream({ reset: true });
-                    return ai.models.generateContentStream(answerParams(sys, withSearch)).then((st) => collectStream(st, (all) => { if (again === attempt) site.stream!({ raw: all }); }));
-                  }
-                  return geminiCall(sys, withSearch);
-                });
-            }
+            // The website shows it as it's written: only the attempt running now may reach the page.
             if (!site?.stream) return geminiCall(sys, withSearch);
             const mine = ++attempt;
             if (mine > 1) site.stream({ reset: true });
@@ -2133,8 +2078,7 @@ percentages:
           // there pays for the attempt and gets a thinner answer from the fallback, so they get longer.
           // Shown as it's written, a long answer isn't given up on while the player is reading it.
           // The app's Fast: 20 s at most in the test, 30 s before the fallback.
-          // OpenAI's Fast (gpt-6-luna): 16 s median, 36 of 40 within 30 s in the test: 40 s before the Gemini fallback.
-          const flashWait = site?.stream ? 75000 : site ? 45000 : oaModel ? 40000 : 30000;
+          const flashWait = site?.stream ? 75000 : site ? 45000 : 30000;
           if (evalCapture) {
             const fs = await import('node:fs');
             fs.appendFileSync(String(process.env.QC_EVAL_CAPTURE), JSON.stringify({ id: req.body.evalId, model: answerModel, contents: contentsPayload, systemInstruction: firstSystem, retrySystem: systemInstruction, withSearch: !!searchTools, searchMode, factsUsed, temperature: 0.7, qtype }) + String.fromCharCode(10));
@@ -2179,11 +2123,6 @@ percentages:
           searchSourcesSeen = searchSources(response); groundingLinksSeen = groundingLinks(response);
           groundedSeen = groundedText(response);
           responseText = response.text || '';
-          // Which model answered, on the answer's line and in the feedback ("Pro"/"Fast" for players: modelKind).
-          if (/^gpt-/i.test(modelOf(response))) {
-            oaAnswered = modelOf(response);
-            modelUsed = usePro ? `OpenAI Pro (${oaAnswered})` : `OpenAI Fast (${oaAnswered})`;
-          }
 
           if (!isBlankAnswer(responseText)) {
             charge(usePro);
@@ -2335,22 +2274,6 @@ percentages:
           console.log('[chat] Pro marker step skipped:', e?.message);
         }
       }
-      // OpenAI's Fast (gpt-6-luna) leaves the markers out of its answers (the Nov 19 2026 check: none in 7 screenshot
-      // questions, where gpt-6.2-sol marked what it referred to): a short second call asks it for the block alone.
-      if (oaAnswered && !usePro && imageBase64 && wantMarkers && !/<qc-points>/i.test(responseText)) {
-        try {
-          const shown = responseText.replace(/<qc-[a-z-]+[^>]*>[\s\S]*?<\/qc-[a-z-]+>/gi, '').slice(0, 6000);
-          const mr: any = await withTimeout(openaiAnswer({
-            model: oaAnswered, system: systemInstruction, withSearch: false, effort: 'low', maxOutputTokens: 3000,
-            contents: [{ role: 'user', parts: [...currentParts.filter((p: any) => p.inlineData && /^image\//.test(p.inlineData.mimeType)), { text: `${promptText}\n\n[THE ANSWER ALREADY GIVEN]\n${shown}\n\n[TASK] Reply with only the <qc-points> block for this answer and this screenshot, following the marker rules exactly: point at the things the answer refers to that you can actually see, with their centers on the 0-1000 scale. If nothing it refers to is visible, reply <qc-points>[]</qc-points>.` }] }],
-          }), 15000, 'OpenAI marker step');
-          logUsage('chat-markers', oaAnswered, mr);
-          const block = String(mr?.text || '').match(/<qc-points>[\s\S]*?<\/qc-points>/i);
-          if (block) responseText = `${responseText}\n${block[0]}`;
-        } catch (e: any) {
-          console.log('[chat] OpenAI marker step skipped:', e?.message);
-        }
-      }
       // The guide entries the answer used (a checked or flagship page's tags).
       const guideParsed = extractGuideRefs(responseText, guideTags);
       responseText = guideParsed.text;
@@ -2438,7 +2361,7 @@ percentages:
       if (combatParsed.combat && guidePage && !site) {
         void saveMissingFight({ page: guidePage, combat: combatParsed, steps: stepsParsed.steps, uid: userId, isGuest, game: String(effectiveGame?.name || '') });
       }
-      if (searchesUsed > 0 && !site) recordSearches(searchCtx, searchesUsed, !!oaAnswered);
+      if (searchesUsed > 0 && !site) recordSearches(searchCtx, searchesUsed, false);
       if (chargedBucket && !site) recordPlayerCost({ uid: userId, premium: isPremium, guest: isGuest, dollars: costScope.dollars, searches: costScope.searches });
       // The same cost by day, for the weekly player report (free, Premium or guest).
       if (chargedBucket && !site) recordDailyCost(userId, isGuest ? 'guest' : isPremium ? 'premium' : 'free', costScope.dollars, (req as any).user?.email, { searched: searchesUsed > 0, shot: !!imageBase64 });
@@ -3203,36 +3126,7 @@ percentages:
         console.warn('Gemini Studio TTS encounter:', geminiTtsErr?.message);
       }
 
-      // 2. Secondary Engine: OpenAI TTS (if optional OPENAI_API_KEY is configured in env)
-      const openAiKey = process.env.OPENAI_API_KEY;
-      if (openAiKey) {
-        const openaiVoice = voice || 'nova';
-        const response = await fetch('https://api.openai.com/v1/audio/speech', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openAiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'tts-1',
-            input: cleanText.slice(0, 4000),
-            voice: openaiVoice,
-            response_format: 'mp3'
-          }),
-        });
-
-        if (response.ok) {
-          const arrayBuffer = await response.arrayBuffer();
-          const base64Audio = Buffer.from(arrayBuffer).toString('base64');
-          return res.json({
-            audioBase64: base64Audio,
-            mimeType: 'audio/mp3',
-            voice: openaiVoice,
-            engine: 'openai'
-          });
-        }
-      }
-
+      // (No OpenAI voice since Nov 24 2026: the app falls back to the computer's own voice.)
       return res.status(500).json({ error: 'TTS audio synthesis is unavailable at this time.' });
     } catch (err: any) {
       console.error('API /api/tts error:', err);
@@ -3321,7 +3215,7 @@ percentages:
   <div class="container">
     <div class="badge">Official Legal Document</div>
     <h1>Privacy Policy for Quest Compendium</h1>
-    <div class="updated">Last updated: November 19, 2026</div>
+    <div class="updated">Last updated: November 24, 2026</div>
 
     <p>Welcome to <strong>Quest Compendium</strong> (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;the application&rdquo;). This Privacy Policy explains how personal information and application data are collected, used, and protected when you use our desktop application and web services.</p>
 
@@ -3353,8 +3247,7 @@ percentages:
     <p>We do not sell, rent, or trade your personal information. We share data only with the following trusted infrastructure providers to deliver the service:</p>
     <ul>
       <li><strong>Google Cloud & Firebase:</strong> Provides user authentication and encrypted cloud database synchronization (Firestore), and sends sign-in link emails.</li>
-      <li><strong>OpenAI API:</strong> Answers questions asked in the app: your question, the recent conversation, and any screenshot or voice recording you attach are sent to OpenAI to write the answer (voice is turned into text first). When Google's voice is unavailable, OpenAI also reads answers aloud (the answer's text is sent to it). OpenAI does not use this data to train its models, and may keep it for up to 30 days to check for abuse; we ask it not to store answers beyond that.</li>
-      <li><strong>Google Gemini API:</strong> Answers questions when OpenAI is unavailable and on our website, and powers other features: pictures, videos and drawings with answers, on-screen markers, place detection, guides, and text-to-speech narration. It processes the inquiries, images, and voice queries those features need. Google may keep prompts for up to 55 days to check for abuse. We don't keep screenshots sent from our homepage: they go to the Gemini API to answer that one question.</li>
+      <li><strong>Google Gemini API:</strong> Answers questions asked in the app and on our website (your question, the recent conversation, and any screenshot or voice recording you attach), and powers other features: pictures, videos and drawings with answers, on-screen markers, place detection, guides, and text-to-speech narration. It processes the inquiries, images, and voice queries those features need. Google may keep prompts for up to 55 days to check for abuse. We don't keep screenshots sent from our homepage: they go to the Gemini API to answer that one question.</li>
       <li><strong>Valve Steam Web API:</strong> Provides public game details, achievement lists, and news.</li>
       <li><strong>Stripe:</strong> Secure payment gateway for managing subscriptions and checkout.</li>
     </ul>

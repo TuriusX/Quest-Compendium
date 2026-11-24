@@ -18,6 +18,8 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        // Registered in src/main.tsx, on the website only: the desktop app loads from files, where it can't work.
+        injectRegister: null,
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
           id: '/',

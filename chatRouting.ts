@@ -18,9 +18,8 @@ import { apiLimits, quotaDay } from './apiLimits';
 export type Routing = {
   freeProMarkers: boolean; playerProDaily: number; proTimeoutMs: number; testAsFree?: boolean;
   /**
-   * OpenAI answers (openaiAnswer.ts, owner Nov 19 2026): the model for Pro and for the app's Fast ('' = Gemini as
-   * before), for openaiShare percent of players (0-100, the same players each day: by account) plus anyone in openaiUids
-   * (the owner's test first). Gemini answers when OpenAI is down, slow, or not set up (no OPENAI_API_KEY).
+   * OpenAI settings (Nov 19 2026). NOT USED since Nov 24 2026: players' questions and the server's helpers run on
+   * Gemini only. Kept so the stored config still reads; the guide pipeline has its own OpenAI switches.
    */
   openaiPro: string; openaiFast: string; openaiShare: number; openaiUids: string[];
   /** The owner's accounts (ADMIN_EMAILS) get OpenAI whatever the share: the owner tries it first. */
@@ -49,22 +48,6 @@ export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily
 const geminiName = (v: unknown) => (/^gemini-[a-z0-9.-]+$/i.test(String(v || '')) ? String(v) : '');
 const thinking = (v: unknown, d: Thinking): Thinking => (v === 'low' || v === 'medium' || v === 'high' ? v : d);
 
-/** The OpenAI model for a website question, or '' for Gemini. */
-export function openaiSiteModel(r: Routing, pro: boolean): string {
-  return r.openaiSite ? (pro ? r.openaiPro : r.openaiFast) : '';
-}
-
-/** The OpenAI model for this question, or '' for Gemini. A stable share of players: by a hash of the account id. */
-export function openaiModelFor(r: Routing, o: { pro: boolean; uid: string; owner?: boolean }): string {
-  const model = o.pro ? r.openaiPro : r.openaiFast;
-  if (!model || !o.uid) return '';
-  if (r.openaiUids.includes(o.uid) || (r.openaiOwner && o.owner)) return model;
-  if (r.openaiShare <= 0) return '';
-  if (r.openaiShare >= 100) return model;
-  let h = 0;
-  for (const ch of o.uid) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return h % 100 < r.openaiShare ? model : '';
-}
 export const PRO_CHAT_MODEL = process.env.PRO_CHAT_MODEL || 'gemini-3.1-pro-preview';
 
 let cache: { at: number; value: Routing } | null = null;
