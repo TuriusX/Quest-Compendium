@@ -41,7 +41,7 @@ export function SignInCard({ onSignIn, pro, fast }: { onSignIn: () => void; pro?
         <X className="w-4 h-4" />
       </button>
       <p className="text-sm font-semibold text-white leading-snug">{t('signin.card')}</p>
-      {pro != null && fast != null && <p className="mt-1 text-xs text-zinc-300">{t('signin.cardAmounts', { pro, fast })}</p>}
+      {pro != null && fast != null && <p className="mt-1 text-xs text-zinc-300">{t('signin.cardAmounts', { n: Number(pro) + Number(fast) })}</p>}
       <button
         type="button"
         onClick={onSignIn}

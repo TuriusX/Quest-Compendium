@@ -226,5 +226,9 @@
   "(quicker answers) next to the send button. When one runs out, the other answers.": "（スピーディーな回答）を送信ボタンの横で切り替え可能。片方の利用上限に達しても、もう一方が回答します。",
   "When you ask a question, the app sends your question, the game name and, if you include one, a screenshot to the Quest Compendium server, which passes them to OpenAI's AI to write the answer (Google's Gemini answers if OpenAI is unavailable). If you sign in, your notes and progress sync to the cloud. Details are in the": "質問を送信すると、アプリから質問内容、ゲーム名、そして添付したスクリーンショットがQuest Compendiumのサーバーに送られ、OpenAIのAIが回答を作成します（OpenAIが利用できない場合はGoogleのGeminiが回答）。サインインすると、ノートや進捗状況がクラウドに同期されます。詳細は",
   "Powered by OpenAI and Google Gemini. Quest Compendium is an independent project and is not affiliated with or endorsed by Valve, Steam, Microsoft, OpenAI or Google.": "Powered by OpenAI and Google Gemini. Quest Compendiumは独立したプロジェクトであり、Valve、Steam、Microsoft、OpenAI、Googleとの提携や推奨関係はありません。",
-  "Powered by Google's Gemini models, it recognizes the game you're playing, reads your screenshots, and takes longer to think when a question needs it. Answers stay thorough.": "GoogleのGeminiモデルを搭載し、プレイ中のゲームを認識してスクリーンショットを読み取ります。じっくり考える必要のある質問にはしっかり時間をかけ、常に丁寧で充実した回答をお届けします。"
+  "Powered by Google's Gemini models, it recognizes the game you're playing, reads your screenshots, and takes longer to think when a question needs it. Answers stay thorough.": "GoogleのGeminiモデルを搭載し、プレイ中のゲームを認識してスクリーンショットを読み取ります。じっくり考える必要のある質問にはしっかり時間をかけ、常に丁寧で充実した回答をお届けします。",
+  "Free to try: 7 questions a day, no credit card.": "無料でお試し：1日7問まで、クレカ登録不要。",
+  "7 questions a day": "1日7問",
+  "25 questions a day": "1日25問",
+  "You can try it for free with 7 questions a day, no credit card needed. Premium is $4.99/month or $39.99/year (save 33%) for 25 questions a day, with unused questions carrying over, plus premium features like on-screen markers and Gemini voices. During the beta, every player gets every feature. See": "クレカ登録不要、1日7問まで無料でお試しいただけます。Premiumは月額$4.99、または年額$39.99（33%オフ）で1日25問まで利用でき、余った質問数は翌日以降に繰り越せます。さらに、画面上のマーカー表示やGemini音声などのプレミアム機能も利用可能です。ベータ版の期間中は、すべてのプレイヤーが全機能をお使いいただけます。詳細は"
 }

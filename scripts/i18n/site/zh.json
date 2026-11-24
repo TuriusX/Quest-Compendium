@@ -226,5 +226,9 @@
   "(quicker answers) next to the send button. When one runs out, the other answers.": "（极速回答）模式。当其中一个额度用尽时，另一个会自动接替回答。",
   "When you ask a question, the app sends your question, the game name and, if you include one, a screenshot to the Quest Compendium server, which passes them to OpenAI's AI to write the answer (Google's Gemini answers if OpenAI is unavailable). If you sign in, your notes and progress sync to the cloud. Details are in the": "当你提问时，应用会将你的问题、游戏名称以及截图（如果有）发送至 Quest Compendium 服务器，再转交给 OpenAI 的 AI 生成回答（若 OpenAI 服务不可用，则由 Google 的 Gemini 接替回答）。登录后，你的笔记和进度将同步到云端。详情请参阅",
   "Powered by OpenAI and Google Gemini. Quest Compendium is an independent project and is not affiliated with or endorsed by Valve, Steam, Microsoft, OpenAI or Google.": "由 OpenAI 与 Google Gemini 提供技术支持。Quest Compendium 为独立项目，与 Valve、Steam、Microsoft、OpenAI 或 Google 无任何关联，亦未获得其官方认可。",
-  "Powered by Google's Gemini models, it recognizes the game you're playing, reads your screenshots, and takes longer to think when a question needs it. Answers stay thorough.": "由 Google 的 Gemini 模型强力驱动，它能智能识别你正在畅玩的游戏、读取你的游戏截图，并在面对复杂问题时深入思考。给出的解答始终详尽透彻。"
+  "Powered by Google's Gemini models, it recognizes the game you're playing, reads your screenshots, and takes longer to think when a question needs it. Answers stay thorough.": "由 Google 的 Gemini 模型强力驱动，它能智能识别你正在畅玩的游戏、读取你的游戏截图，并在面对复杂问题时深入思考。给出的解答始终详尽透彻。",
+  "Free to try: 7 questions a day, no credit card.": "免费体验：每天可提问 7 次，无需信用卡。",
+  "7 questions a day": "每天 7 次提问",
+  "25 questions a day": "每天 25 次提问",
+  "You can try it for free with 7 questions a day, no credit card needed. Premium is $4.99/month or $39.99/year (save 33%) for 25 questions a day, with unused questions carrying over, plus premium features like on-screen markers and Gemini voices. During the beta, every player gets every feature. See": "你可以免费试用，每天享 7 次提问额度，无需绑定信用卡。订阅 Premium 仅需 $4.99/月 或 $39.99/年（立省 33%），每天可享 25 次提问，未用完的额度支持结转滚存；还能解锁屏幕标记、Gemini 语音等高级功能。Beta 测试期间，所有玩家均可免费畅享全部功能。查看"
 }
