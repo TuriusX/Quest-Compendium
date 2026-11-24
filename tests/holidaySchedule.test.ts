@@ -1,6 +1,6 @@
 // Run: npx tsx tests/holidaySchedule.test.ts
 import assert from "node:assert/strict";
-import { scheduledAllowances, normalizeAllowances } from "../allowances";
+import { scheduledAllowances, normalizeAllowances, ALLOWANCE_DEFAULTS } from "../allowances";
 import { PLAYER_MONTHLY } from "../searchGuard";
 import { activeOffer, activeTrial, trialEligible, trialStep } from "../offers";
 
@@ -18,8 +18,9 @@ test("before, during (first and last day) and after the holidays", () => {
   assert.deepEqual([at("2027-01-05").free.pro, at("2027-01-05").free.flash], [2, 5]);
 });
 test("guests and Premium unchanged", () => {
-  assert.equal(at("2026-12-10").guest.pro, 1);
-  assert.equal(at("2026-12-10").premium.flash, 25);
+  // (Compared with the defaults, so a change to Premium's or guests' amounts doesn't break this test.)
+  assert.deepEqual(at("2026-12-10").guest, ALLOWANCE_DEFAULTS.guest);
+  assert.deepEqual(at("2026-12-10").premium, ALLOWANCE_DEFAULTS.premium);
 });
 test("no schedule, no change", () => assert.equal(normalizeAllowances(scheduledAllowances({}, "2026-12-10")).free.pro, 2));
 test("players' search reserve by month", () => {

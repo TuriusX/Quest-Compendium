@@ -1,7 +1,7 @@
 /**
  * Question allowances, in two models (server-side, changeable without a deploy): Firestore config/allowances.
  *
- *   premium  { pro: 8, flash: 25, rollover: true, cap: 100 }   a day; unused questions carry over, each model's banked
+ *   premium  { pro: 10, flash: 15, rollover: true, cap: 100 }   a day; unused questions carry over, each model's banked
  *                                                               balance capped at `cap`
  *   free     { pro: 2, flash: 5, rollover: false }             a day for signed-in players; no carry-over
  *   guest    { pro: 1, flash: 3, rollover: false }             a day without signing in (signing in unlocks free's)

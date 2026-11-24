@@ -11,24 +11,24 @@ function test(name: string, fn: () => void) {
 }
 const bal = (b: any) => [b.proQueriesAvailable, b.flashQueriesAvailable];
 
-test("allowances: the defaults are 8 Pro + 25 Fast (Premium, carry-over capped at 100) and 2 + 5 (free)", () => {
-  assert.deepEqual(A.premium, { pro: 8, flash: 25, rollover: true, cap: 100 });
+test("allowances: the defaults are 10 Pro + 15 Fast (Premium, carry-over capped at 100) and 2 + 5 (free)", () => {
+  assert.deepEqual(A.premium, { pro: 10, flash: 15, rollover: true, cap: 100 });
   assert.deepEqual(A.free, { pro: 2, flash: 5, rollover: false, cap: 0 });
-  assert.deepEqual(normalizeAllowances({ premium: { pro: "10", cap: -3 }, free: { flash: 7, rollover: "yes" } }).premium, { pro: 10, flash: 25, rollover: true, cap: 100 });
+  assert.deepEqual(normalizeAllowances({ premium: { pro: "10", cap: -3 }, free: { flash: 7, rollover: "yes" } }).premium, { pro: 10, flash: 15, rollover: true, cap: 100 });
   assert.deepEqual(normalizeAllowances({ free: { flash: 7, rollover: "yes" } }).free, { pro: 2, flash: 7, rollover: false, cap: 0 });
 });
 
 test("first day on two models: today's allowance, whatever the old single count was", () => {
-  assert.deepEqual(bal(applyDay({ proQueriesAvailable: 60, flashQueriesAvailable: 60, lastResetDate: "2026-10-08" }, A, true, "2026-10-08")), [8, 25]);
+  assert.deepEqual(bal(applyDay({ proQueriesAvailable: 60, flashQueriesAvailable: 60, lastResetDate: "2026-10-08" }, A, true, "2026-10-08")), [10, 15]);
   assert.deepEqual(bal(applyDay({}, A, false, "2026-10-08")), [2, 5]);
 });
 
 test("Premium rollover: unused questions carry over at the reset", () => {
   const b = applyDay({ proQueriesAvailable: 3, flashQueriesAvailable: 10, lastResetDate: "2026-10-07", allowancePlan: "premium" }, A, true, "2026-10-08");
-  assert.deepEqual(bal(b), [11, 35]);
+  assert.deepEqual(bal(b), [13, 25]);
   assert.equal(b.lastResetDate, "2026-10-08");
   // Three days away: three days' allowance added.
-  assert.deepEqual(bal(applyDay({ proQueriesAvailable: 0, flashQueriesAvailable: 0, lastResetDate: "2026-10-05", allowancePlan: "premium" }, A, true, "2026-10-08")), [24, 75]);
+  assert.deepEqual(bal(applyDay({ proQueriesAvailable: 0, flashQueriesAvailable: 0, lastResetDate: "2026-10-05", allowancePlan: "premium" }, A, true, "2026-10-08")), [30, 45]);
 });
 
 test("Premium rollover: each model's bank is capped at 100", () => {
@@ -46,8 +46,8 @@ test("same day: nothing changes; balances never go up by asking again", () => {
 
 test("plan changes the same day: upgrading tops up to Premium's day once; Premium ending keeps at most the free day", () => {
   const up = applyDay({ proQueriesAvailable: 0, flashQueriesAvailable: 1, lastResetDate: "2026-10-08", allowancePlan: "free" }, A, true, "2026-10-08");
-  assert.deepEqual(bal(up), [8, 25]);
-  assert.deepEqual(bal(applyDay({ ...up, proQueriesAvailable: 7 }, A, true, "2026-10-08")), [7, 25]); // no second top-up
+  assert.deepEqual(bal(up), [10, 15]);
+  assert.deepEqual(bal(applyDay({ ...up, proQueriesAvailable: 7 }, A, true, "2026-10-08")), [7, 15]); // no second top-up
   assert.deepEqual(bal(applyDay({ proQueriesAvailable: 60, flashQueriesAvailable: 90, lastResetDate: "2026-10-08", allowancePlan: "premium" }, A, false, "2026-10-08")), [2, 5]);
 });
 

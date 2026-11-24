@@ -225,7 +225,7 @@ const HUB = { tr: { x: 1920 - 33, y: 33 }, tl: { x: 33, y: 33 }, br: { x: 1920 -
       this.b = { x: 0, y: 0, width: o.width, height: o.height };
       this.visible = false; this.destroyed = false; this.sent = []; this.ignore = []; this.focused = false; this.focusable = o.focusable !== false; this.opacity = 1;
       const self = this;
-      this.webContents = { send: (c, p) => self.sent.push([c, p]), once: (ev, cb) => { if (ev === 'did-finish-load') setTimeout(cb, 0); }, invalidate: () => {} };
+      this.webContents = { send: (c, p) => self.sent.push([c, p]), once: (ev, cb) => { if (ev === 'did-finish-load') setTimeout(cb, 0); }, invalidate: () => {}, on: () => {} };
       wins.push(this);
     }
     setAlwaysOnTop() {} setContentProtection() {} loadFile() {} on() {}
