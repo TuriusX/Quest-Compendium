@@ -270,6 +270,30 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
     card.hide();
   });
 
+  await test('read to the end, the card goes 3 s later; stopping the voice takes the card with it', () => {
+    card.answer({ ...ANSWER, id: 'r1' });
+    card.speaking(true);
+    tick(120000); // (the reading takes its time: the card waits)
+    assert.equal(card.isShowing(), true);
+    card.speaking(false);
+    tick(2900);
+    assert.equal(card.isShowing(), true);
+    tick(200);
+    assert.equal(card.isShowing(), false);
+    // The combo or the shortcut while it's reading: the voice stops and the card goes at once.
+    spoken.length = 0;
+    card.answer({ ...ANSWER, id: 'r2' });
+    card.speaking(true);
+    card.stopReading();
+    assert.equal(card.isShowing(), false);
+    assert.equal(spoken[spoken.length - 1], null);
+    // Not reading: the card stays.
+    card.answer({ ...ANSWER, id: 'r3' });
+    card.stopReading();
+    assert.equal(card.isShowing(), true);
+    card.hide();
+  });
+
   mock.timers.reset();
   Module._load = realLoad;
   console.log(`\n${passed} tests passed`);

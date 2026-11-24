@@ -47,6 +47,7 @@ const SCALE = { s: 0.85, m: 1, l: 1.3 };
 const MARGIN = 24;
 const THINKING_MS = 120000; // a question that never got an answer goes after this
 const HINT_MS = 7000; // the orb's how-to-ask line
+const AFTER_READ_MS = 3000; // the card after its part has been read aloud to the end
 const FOLD_MS = 520; // the card folding back into the orb (the page's animation, and a little more)
 const MENU_LEAVE_MS = 1400; // the orb's menu closes once the mouse has been away from it this long
 const DWELL_MS = 150; // the mouse resting on the orb this long opens the quick menu's fan (owner, Nov 20 2026: "near-instant"; was 480 ms; just enough that a cursor passing over doesn't)
@@ -460,7 +461,8 @@ function createAnswerCard(opts) {
     opts.onSpeak({ id: current.id, text: parts[at] });
   };
   /** More of the answer to read aloud (and none being read now): "Keep reading" on the quick menu. */
-  const canKeepReading = () => !!current && !!shownAt && !speakingNow && current.state === 'answer' && !!current.readStarted && (Number(current.readAt) || 0) < partsOf(current).length;
+  // (Also once the card has gone, for the answer "Open this answer" would still open: Keep reading brings it back.)
+  const canKeepReading = () => !!current && !speakingNow && current.state === 'answer' && (!!shownAt || Date.now() - current.at < 120000) && !!current.readStarted && (Number(current.readAt) || 0) < partsOf(current).length;
   const paintRead = () => send('card-read', { more: canKeepReading() });
   function stopSpeaking() {
     if (opts.onSpeak) opts.onSpeak(null);
@@ -695,7 +697,9 @@ function createAnswerCard(opts) {
         speakingNow = false;
         if (current && readingPart >= 0) current.readAt = readingPart + 1;
         readingPart = -1;
-        if (pausedLeft) pausedLeft = Math.max(pausedLeft, canKeepReading() ? 15000 : 8000);
+        // Then 3 s more, and it goes (owner, Nov 23 2026: "the card lasts for maybe 3 more seconds after it is done
+        // with its normal reading"). The mouse over it or a video playing still keeps it.
+        if (pausedLeft) pausedLeft = AFTER_READ_MS;
         resume();
         paintRead();
       }
@@ -711,9 +715,14 @@ function createAnswerCard(opts) {
       speak(true);
     },
     canKeepReading,
-    /** Reading aloud stops now (the controller's combo opened the quick menu): Keep reading starts that part again. */
+    /**
+     * Reading aloud stops now and the card goes with it (the controller's combo or the shortcut opened the quick menu;
+     * owner, Nov 23 2026: muting "also dismisses it"). Keep reading brings it back and starts that part again.
+     */
     stopReading() {
-      if (speakingNow) stopSpeaking();
+      if (!speakingNow) return;
+      stopSpeaking();
+      hide('close');
     },
     hide() {
       current = null;
