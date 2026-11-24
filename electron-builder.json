@@ -52,7 +52,42 @@
   },
   "files": [
     "dist/**/*",
-    "electron/**/*"
+    "electron/**/*",
+    "!dist/server.cjs",
+    "!dist/server.cjs.map",
+    "!dist/*.zip",
+    "!dist/appx/**",
+    "!dist/quest-compendium-*.png",
+    "!dist/96628ca1-*.png",
+    "!dist/store-*.png",
+    "!dist/youtube-pfp*.png",
+    "!node_modules/**",
+    "node_modules/@ghostery/**/*",
+    "node_modules/@remusao/**/*",
+    "node_modules/argparse/**/*",
+    "node_modules/builder-util-runtime/**/*",
+    "node_modules/cross-fetch/**/*",
+    "node_modules/electron-updater/**/*",
+    "node_modules/fs-extra/**/*",
+    "node_modules/graceful-fs/**/*",
+    "node_modules/ms/**/*",
+    "node_modules/debug/**/*",
+    "node_modules/js-yaml/**/*",
+    "node_modules/jsonfile/**/*",
+    "node_modules/koffi/**/*",
+    "node_modules/lazy-val/**/*",
+    "node_modules/lodash.escaperegexp/**/*",
+    "node_modules/lodash.isequal/**/*",
+    "node_modules/node-fetch/**/*",
+    "node_modules/sax/**/*",
+    "node_modules/tiny-typed-emitter/**/*",
+    "node_modules/tldts-core/**/*",
+    "node_modules/tldts-experimental/**/*",
+    "node_modules/tr46/**/*",
+    "node_modules/universalify/**/*",
+    "node_modules/webidl-conversions/**/*",
+    "node_modules/whatwg-url/**/*",
+    "!node_modules/koffi/build/koffi/!(win32_x64|linux_x64)/**"
   ],
   "asarUnpack": [
     "node_modules/koffi/**"
@@ -64,5 +99,20 @@
       "repo": "Quest-Compendium",
       "releaseType": "release"
     }
+  ],
+  "electronLanguages": [
+    "en-US",
+    "en-GB",
+    "es",
+    "es-419",
+    "pt-BR",
+    "pt-PT",
+    "de",
+    "fr",
+    "ru",
+    "ja",
+    "ko",
+    "zh-CN",
+    "zh-TW"
   ]
 }
