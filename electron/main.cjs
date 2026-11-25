@@ -1591,11 +1591,15 @@ ipcMain.handle('get-active-game', async () => {
 });
 
 // Premium checkout and the Stripe customer portal (and our own pages) open in the system browser, never in the
-// overlay: only https links to Stripe's checkout / billing pages and Quest Compendium's own addresses.
+// overlay: https links to Stripe's checkout / billing pages and Quest Compendium's own addresses. From the app's own
+// windows, any web page too (owner, Nov 24 2026: the quest log's wiki links "just do nothing"; the answers' Sources
+// were refused the same way since they started using this): wiki and guide pages a player picked.
 ipcMain.on('open-external', (event, url) => {
   try {
     const u = new URL(String(url || ''));
-    const ok = u.protocol === 'https:' && (/^(checkout|billing)\.stripe\.com$/.test(u.hostname) || u.hostname === 'questcompendium.com' || /^quest-compendium-[a-z0-9-]+\.run\.app$/.test(u.hostname));
+    const ours = [mainWindow, settingsWindow].some((w) => w && !w.isDestroyed() && event.sender === w.webContents);
+    const ok = (u.protocol === 'https:' && (/^(checkout|billing)\.stripe\.com$/.test(u.hostname) || u.hostname === 'questcompendium.com' || /^quest-compendium-[a-z0-9-]+\.run\.app$/.test(u.hostname)))
+      || (ours && (u.protocol === 'https:' || u.protocol === 'http:') && !u.username && !u.password);
     if (ok) shell.openExternal(u.toString());
     else console.warn('[open-external] refused', u.hostname);
   } catch { /* not a URL */ }

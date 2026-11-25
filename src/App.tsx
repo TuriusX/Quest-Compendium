@@ -1197,15 +1197,14 @@ export default function App() {
   // is filed in that game's compendium). Owner, Nov 23 2026: "videos are showing up fine in the app ... It's just not
   // showing in the pop up cards".
   const cardSentRef = useRef<{ id: string; sig: string } | null>(null);
-  const cardCloseUpRef = useRef(new Map<string, string>());
-  const [cardCloseUpTick, setCardCloseUpTick] = useState(0);
   useEffect(() => {
     const api = (window as any).electronAPI;
     if (!api?.answerArrived || !activeTab) return;
     const pictureOf = (m: ChatMessage) => {
       const v = !m.visualHidden ? m.visual : undefined;
       const dr = !m.drawnHidden ? m.drawn : undefined;
-      const closeUp = cardCloseUpRef.current.get(m.id);
+      // (No close-up of the player's own screen when the answer has no picture: owner, Nov 24 2026, "I don't think we need
+      // to show our own screen shot on the pop up cards. Just takes up useless space".)
       // A drawn answer comes first (owner, Nov 18 2026), shown across the card.
       return dr ? {
           url: dr.url, wide: true,
@@ -1214,7 +1213,6 @@ export default function App() {
         }
         : v?.kind === 'picture' && v.source !== 'ours' ? { url: v.url, credit: v.credit || v.page?.site || '' }
         : v?.kind === 'video' ? { url: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`, credit: v.channel || 'YouTube', video: true, videoId: v.videoId, start: v.start, seconds: v.seconds, title: v.title }
-        : closeUp ? { url: closeUp, credit: tr('card.yourScreen') }
         : null;
     };
     const sigOf = (m: ChatMessage) => `${m.id}:${(m.text || '').length}:${pictureOf(m)?.url.slice(-40) || ''}`;
@@ -1257,7 +1255,7 @@ export default function App() {
       if (sigOf(m) !== sent.sig) send(m, t);
       break;
     }
-  }, [tabs, activeTab?.id, cardCloseUpTick]);
+  }, [tabs, activeTab?.id]);
   useEffect(() => {
     const on = () => void runHelpRef.current();
     window.addEventListener('qc-help-here', on);
@@ -2645,13 +2643,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         tabsRef.current.flatMap((t) => t.messages).find((m) => m.id === msgId)?.donePoints ?? [],
       );
       log(`placed on the screen now: ${found.length} of ${points.length} found in ${Math.round(performance.now() - t0)} ms`);
-      // The pop-up card's picture when the answer has none of its own: a thing the check confirmed is on screen.
-      const sure = found.find((f) => crops[f.index]);
-      if (sure) {
-        cardCloseUpRef.current.set(msgId, crops[sure.index]);
-        if (cardCloseUpRef.current.size > 20) cardCloseUpRef.current.delete(cardCloseUpRef.current.keys().next().value as string);
-        setCardCloseUpTick((n) => n + 1);
-      }
       if (s.removed.length) {
         updateMessageById(msgId, (m) => ({
           ...m,

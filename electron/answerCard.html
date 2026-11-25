@@ -395,7 +395,8 @@
     $('q').textContent = d.question || '';
     $('title').textContent = '';
     $('title').hidden = true;
-    setPicture(d.screen ? { url: d.screen, credit: S.yourScreen, small: true } : null);
+    // No thumbnail of the player's own screenshot (owner, Nov 24 2026: "takes up useless space"); "Got your screen" below says it.
+    setPicture(null);
     $('warn').hidden = true;
     $('intro').hidden = true;
     $('sum').hidden = true;
