@@ -1057,13 +1057,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {typeof window !== 'undefined' && (window as any).electronAPI && settings.showPointersOnScreen !== false && (
                   <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
                     <div>
-                      <div className="text-xs font-semibold text-white">{tr('set.recordMarkers')}</div>
-                      <div className="text-[11px] text-zinc-400">{tr('set.recordMarkersDesc')}</div>
+                      <div className="text-xs font-semibold text-white">{tr('set.recordOverlay')}</div>
+                      <div className="text-[11px] text-zinc-400">{tr('set.recordOverlayDesc')}</div>
                     </div>
                     <button
                       role="switch"
                       aria-checked={settings.markersInRecordings !== false}
-                      aria-label={tr('set.recordMarkers')}
+                      aria-label={tr('set.recordOverlay')}
                       onClick={() => {
                         playBlipSound(soundEnabled);
                         onUpdateSettings({ markersInRecordings: settings.markersInRecordings === false });

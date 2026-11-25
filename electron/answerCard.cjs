@@ -167,6 +167,11 @@ function createAnswerCard(opts) {
   let dwellFrom = 0; // since when the mouse has rested on the orb (the fan opens after DWELL_MS)
   let dwellDone = false;
   let fanOn = false; // the quick menu's fan is out of the orb: it glows
+  // Seen in the player's own screenshots and recordings (owner, Nov 24 2026: Settings' "Show the overlay in screenshots
+  // and recordings", so he can take real in-game shots); always kept out of the app's own screenshots for the AI
+  // (hideForCapture, from main.cjs's captures).
+  let recordable = false;
+  let captureHidden = false;
 
   const scale = () => SCALE[prefs.size] || 1;
   const width = () => Math.round(WIDTH * scale());
@@ -205,9 +210,9 @@ function createAnswerCard(opts) {
     });
     win.setAlwaysOnTop(true, 'screen-saver');
     // Clicks go through to the game (except over the card, the orb or its menu: see the watch); never in the app's own
-    // screenshots.
+    // screenshots (hideForCapture), in the player's own only with the setting on.
     applyMouseMode();
-    win.setContentProtection(true);
+    win.setContentProtection(!recordable || captureHidden);
     const w = win;
     win.webContents.once('did-finish-load', () => {
       if (win !== w) return; // dropped meanwhile
@@ -796,6 +801,23 @@ function createAnswerCard(opts) {
         hub: { x: Math.round(right ? b.x + b.width - g.box / 2 : b.x + g.box / 2), y: Math.round(bottom ? b.y + b.height - g.box / 2 : b.y + g.box / 2) },
         corner: prefs.corner, scale: s, dot: !orbState.look(orb).orb, card: false,
       };
+    },
+    /** Seen in the player's screenshots and recordings (the setting), or kept out of every capture. */
+    setRecordable(on) {
+      recordable = !!on;
+      if (alive() && !captureHidden) win.setContentProtection(!recordable);
+    },
+    /** Kept out of the app's own screenshot about to be taken (the AI's); true if that changed anything. */
+    hideForCapture() {
+      if (!recordable || captureHidden || !alive() || !win.isVisible()) return false;
+      captureHidden = true;
+      win.setContentProtection(true);
+      return true;
+    },
+    showAfterCapture() {
+      if (!captureHidden) return;
+      captureHidden = false;
+      if (alive()) win.setContentProtection(!recordable);
     },
     /** The fan is out of the orb (true) or gone (false): the orb glows brighter while it's out. */
     setFan(on) {

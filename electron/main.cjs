@@ -107,8 +107,21 @@ const { pickCaptureDisplay } = require('./gameScreen.cjs');
 const tracker = require('./tracker.cjs');
 const logWindow = require('./logWindow.cjs');
 /** Around a screenshot for the AI: the quest log (popped out or its ribbon) out of the picture, then back. */
-const hideLogsForCapture = () => { const a = tracker.hideForCapture(); const b = logWindow.hideForCapture(); return a || b; };
-const showLogsAfterCapture = () => { tracker.showAfterCapture(); logWindow.showAfterCapture(); };
+// Our windows kept out of every screenshot the app takes for the AI (the quest logs; the pop-up card and the quick menu
+// when the player lets them into their own screenshots: owner, Nov 24 2026).
+const hideLogsForCapture = () => {
+  const a = tracker.hideForCapture();
+  const b = logWindow.hideForCapture();
+  const c = !!answerCard && answerCard.hideForCapture();
+  const d = !!quickWheel && quickWheel.hideForCapture();
+  return a || b || c || d;
+};
+const showLogsAfterCapture = () => {
+  tracker.showAfterCapture();
+  logWindow.showAfterCapture();
+  if (answerCard) answerCard.showAfterCapture();
+  if (quickWheel) quickWheel.showAfterCapture();
+};
 // Pin beside the game (roadmap item 30, step 3): a video or picture in a small always-on-top window.
 require('./pin.cjs').register();
 const { initUpdater } = require('./updater.cjs');
@@ -867,6 +880,7 @@ app.whenReady().then(() => {
       if (what === 'busy' && quickWheel && quickWheel.fanMode() === 'mouse') quickWheel.close();
     },
   });
+  answerCard.setRecordable(markersInRecordings); // in the player's own screenshots with the setting on (Nov 24 2026)
   // Asked over the game (the quick menu, or a keyboard shortcut with the panel away): the card shows the question,
   // thinking, and the answer lands there; the panel never comes in by itself (owner, Nov 17-18 2026).
   const askedQuietly = (label, mode = 'pad') => {
@@ -944,6 +958,7 @@ app.whenReady().then(() => {
       mainWindow.webContents.send('quick-action', `talk-${state}`);
     },
   });
+  quickWheel.setRecordable(markersInRecordings); // in the player's own screenshots with the setting on (Nov 24 2026)
   // Voice from the quick menu ended by itself (the player stopped talking: it's sent; or it never got going): the menu
   // closes, and a sent question shows on the card as asking.
   ipcMain.on('voice-done', (event, state) => {
@@ -1732,6 +1747,9 @@ ipcMain.on('set-overlay-options', (event, opts) => {
     markersInRecordings = opts.markersInRecordings;
     tracker.setVisibleInRecordings(markersInRecordings); // the objectives tracker follows the markers
     logWindow.setVisibleInRecordings(markersInRecordings);
+    // ...and the pop-up card and the quick menu (owner, Nov 24 2026), still never in the AI's screenshots.
+    if (answerCard) answerCard.setRecordable(markersInRecordings);
+    if (quickWheel) quickWheel.setRecordable(markersInRecordings);
   }
   if (opts && Number.isFinite(opts.markerLifetimeMs) && opts.markerLifetimeMs >= 0) {
     markerLifetimeMs = opts.markerLifetimeMs;

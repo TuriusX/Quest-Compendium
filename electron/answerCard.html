@@ -240,11 +240,15 @@
   let O = { on: false };
 
   // Plain text from the answer's markdown: no emphasis marks or headings, bullets as •.
+  // Bullets first, then bold / italics / code only between matching marks (Nov 24 2026: a list item starting
+  // "* **Margit:**" paired the bullet's * with the bold, and the card showed a stray "**" further on).
   const plain = (s) => String(s || '')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/[*_`]{1,3}([^*_`\n]+)[*_`]{1,3}/g, '$1')
+    .replace(/^\s*[-*+]\s+/gm, '• ')
     .replace(/^#{1,6}\s*/gm, '')
-    .replace(/^\s*[-*]\s+/gm, '• ')
+    .replace(/(\*\*\*|\*\*|\*|___|__|`)(?=\S)([^\n]*?\S)\1/g, '$2')
+    .replace(/(\*\*\*|\*\*|\*|___|__|`)(?=\S)([^\n]*?\S)\1/g, '$2') // (italics inside bold)
+    .replace(/\*+/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   const ICON_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';

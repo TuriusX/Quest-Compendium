@@ -1634,7 +1634,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         </div>
         {(() => {
-          const note = modelNote || (firstRunHint && !isCompanion() ? (isDesktopApp ? t('chat.hintDesktop') : t('chat.hintWeb')) : '');
+          // (No "Ctrl + V" hint on a phone or tablet, which has no keyboard shortcut to paste with: Nov 24 2026.)
+          const touchOnly = !isDesktopApp && typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(any-pointer: fine)').matches;
+          const note = modelNote || (firstRunHint && !isCompanion() && !touchOnly ? (isDesktopApp ? t('chat.hintDesktop') : t('chat.hintWeb')) : '');
           return (
             <div role="status" aria-live="polite" {...(!modelNote ? { 'data-qc-keyhints': '' } : {})} className={`${note ? 'mt-2' : ''} text-center text-[12px] ${modelNote ? 'text-[var(--accent-color)]' : 'text-zinc-400'}`}>
               {note}

@@ -43,6 +43,10 @@ function createWheel(opts) {
   let items = []; // [{ key, label }] from the app (localized)
   let strings = {}; // { title, listening, select, close, ask, cancel }
   let queue = [];
+  // Seen in the player's own screenshots and recordings (owner, Nov 24 2026: Settings' "Show the overlay in screenshots
+  // and recordings"); always kept out of the app's own screenshots for the AI (hideForCapture).
+  let recordable = false;
+  let captureHidden = false;
 
   const send = (channel, payload) => {
     if (!win || win.isDestroyed()) return;
@@ -68,8 +72,9 @@ function createWheel(opts) {
       webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false, preload: path.join(__dirname, 'wheelPreload.cjs') },
     });
     win.setAlwaysOnTop(true, 'screen-saver');
-    // Never in the app's own screenshots (the AI sees the game, not the menu).
-    win.setContentProtection(true);
+    // Never in the app's own screenshots (the AI sees the game, not the menu: hideForCapture); in the player's own only
+    // with the setting on.
+    win.setContentProtection(!recordable || captureHidden);
     win.webContents.once('did-finish-load', () => {
       ready = true;
       for (const [c, p] of queue) win.webContents.send(c, p);
@@ -314,6 +319,23 @@ function createWheel(opts) {
   });
 
   return {
+    /** Seen in the player's screenshots and recordings (the setting), or kept out of every capture. */
+    setRecordable(on) {
+      recordable = !!on;
+      if (win && !win.isDestroyed() && !captureHidden) win.setContentProtection(!recordable);
+    },
+    /** Kept out of the app's own screenshot about to be taken (the AI's); true if that changed anything. */
+    hideForCapture() {
+      if (!recordable || captureHidden || !win || win.isDestroyed() || !win.isVisible()) return false;
+      captureHidden = true;
+      win.setContentProtection(true);
+      return true;
+    },
+    showAfterCapture() {
+      if (!captureHidden) return;
+      captureHidden = false;
+      if (win && !win.isDestroyed()) win.setContentProtection(!recordable);
+    },
     isOpen: () => open,
     /** Open as the fan from the orb: how it was opened ('pad', 'keys', 'mouse'); null when closed or the full ring. */
     fanMode: () => (open && fan ? fan.mode : null),
