@@ -18,7 +18,9 @@ const TR = new Map<string, OwnerEdit['tr']>();
 export async function loadOwnerEdits(only = ''): Promise<number> {
   let q: FirebaseFirestore.Query = db().collection('guideEdits').where('status', '==', 'live');
   if (only) q = q.where('key', '==', only);
-  EDITS = ((await q.get().catch(() => null))?.docs || []).map((d) => ({ id: d.id, ...(d.data() as any) }));
+  // Oldest first: an edit made on text an earlier edit wrote must come after it (Firestore returns them by id).
+  EDITS = ((await q.get().catch(() => null))?.docs || []).map((d) => ({ id: d.id, ...(d.data() as any) }))
+    .sort((a: any, b: any) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
   STATE.clear();
   TR.clear();
   return EDITS.length;
