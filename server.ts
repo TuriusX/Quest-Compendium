@@ -23,7 +23,7 @@ import { recordGroundingMiss, registerBlueprints } from './blueprints';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine, registerRefind } from './locate';
 import { takeFindAgain } from './markerFindCap';
-import { registerVisualAnswers, answerVisual, visualAnswersOn, visualEvent } from './visualServer';
+import { registerVisualAnswers, answerVisual, visualAnswersOn, visualEvent, isStandInQuestion } from './visualServer';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
 import { registerWorthRoutes, areaRef as worthAreaRef, worthTicket, topUpFromAnswer, ASKS_WHATS_WORTH } from './worthOnDemand';
 import { answerSourceLinks, groundingLinks } from './sourceLinks';
@@ -38,6 +38,7 @@ import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA, WHAT_NEXT_IN_FULL, VOICE_RULE, splitPerQuestion } from './searchPolicy';
 import { asksWhatNext } from './src/utils/whatNext';
 import { isSimpleLookup } from './src/utils/simpleLookup';
+import { needsMedium } from './src/utils/answerEffort';
 import { readSaveState, writeSaveState } from './saveStateStore';
 import { recordPlayerCost, registerPlayerCosts, costCap, monthSpent } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
@@ -1315,7 +1316,17 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       // A simple single-fact lookup (owner, Nov 21 2026): it counts as a quick answer, never a best one, and is answered by
       // the best model thinking minimally with one search ("sol lite": in the blind test 7.4 s and facts 4.96 of 5, vs
       // 11 s and 4.89 for a best answer). With no quick answers left it falls back to a best one as before.
-      const lookup = !site && isSimpleLookup(String(question || ''), !!imageBase64);
+      // (Never a voice message or the app's stand-in text for one or for a screenshot alone: the real question isn't in the text.)
+      // Light answers first (owner, Nov 24 2026; src/utils/answerEffort.ts, config/chatRouting.lightFirst): every question
+      // gets the light answer except what next, puzzles, builds, details on the screen, long questions and screenshot-only
+      // asks; voice questions too unless config/chatRouting.lightVoice is false (the server can't read them first).
+      const asVoice = !!req.body.audioBase64, standIn = !asVoice && isStandInQuestion(String(question || ''));
+      const effortCfg = await routing();
+      const lightFirst = !site && effortCfg.lightFirst !== false;
+      const lookup = !site && (lightFirst
+        ? (asVoice ? effortCfg.lightVoice !== false
+          : !needsMedium(String(question || ''), { quick: isQuickId(req.body.quick) ? req.body.quick : null, hasImage: !!imageBase64, standIn }))
+        : !asVoice && !standIn && isSimpleLookup(String(question || ''), !!imageBase64));
       // The monthly safety cap (playerCosts.ts costCap): a Premium player past it this month gets quick answers until the 1st.
       const overCap = !site && isPremium && !isGuest ? (await monthSpent(userId)) >= (await costCap()).premiumMonthly : false;
       const wanted = lookup || overCap ? 'flash' : wantedBucket(req.body);
@@ -1794,7 +1805,10 @@ percentages:
       // Pro only: in the gate test (Nov 16 2026, 10 questions naming checked facts) Pro with facts made 2 wrong claims
       // against 6, median 14 s against 21, 17% cheaper; Fast with facts made 9 against 2 (it filled in details past the
       // facts without searching, also when told not to), so Fast keeps searching as before.
-      if (searchMode === 'offer' && !site && usePro && effectiveGame?.name && String(question || '').trim() && factsOn) {
+      // Not for choices or "what next" (owner, Nov 24 2026): the facts rarely cover them, so the first try asked for a
+      // search anyway and the whole prompt ran twice (two Baldur's Gate 3 questions that day: +2.6 cents and 5-10 s each).
+      const factsFit = qtype !== 'choice' && !asksWhatNext(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null));
+      if (searchMode === 'offer' && !site && usePro && effectiveGame?.name && String(question || '').trim() && factsOn && factsFit) {
         try {
           const f = await withTimeout(factsForQuestion(guideKey || baseGameKey(effectiveGame.name), String(question), guidePage?.slug || ''), 3000, 'Checked facts') as Awaited<ReturnType<typeof factsForQuestion>>;
           if (f.count) {

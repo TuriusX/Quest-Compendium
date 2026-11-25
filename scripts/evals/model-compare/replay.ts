@@ -18,11 +18,14 @@ const safety = [HarmCategory.HARM_CATEGORY_HATE_SPEECH, HarmCategory.HARM_CATEGO
 const caps = fs.readFileSync(process.env.CAPTURED || 'scratchpad/model-compare/captured.jsonl', 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 const only = process.argv.slice(2);
 
-async function once(model: string, c: any, withSearch: boolean) {
+// A model may name its thinking level: gemini-4-hydrogen@low / @medium (Nov 24 2026, the effort test).
+const LEVELS: Record<string, ThinkingLevel> = { minimal: ThinkingLevel.MINIMAL, low: ThinkingLevel.LOW, medium: ThinkingLevel.MEDIUM, high: ThinkingLevel.HIGH };
+async function once(name: string, c: any, withSearch: boolean) {
+  const [model, level] = name.split('@');
   const config: any = {
     systemInstruction: c.systemInstruction, safetySettings: safety, temperature: c.temperature,
     maxOutputTokens: 8192, ...(withSearch ? { tools: [{ googleSearch: {} }] } : {}),
-    ...(model.includes('pro') ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {}),
+    ...(level ? { thinkingConfig: { thinkingLevel: LEVELS[level] } } : model.includes('pro') ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {}),
   };
   const t0 = Date.now(); let first = 0; let text = ''; let last: any = null; let searches = 0;
   const stream = await g.models.generateContentStream({ model, contents: c.contents, config });
@@ -46,7 +49,7 @@ async function answer(model: string, c: any) {
     r = { ...r2, firstMs: r.totalMs + r2.firstMs, totalMs: r.totalMs + r2.totalMs };
   }
   const inTok = calls.reduce((n, x) => n + x.inTok, 0), outTok = calls.reduce((n, x) => n + x.outTok, 0), searches = calls.reduce((n, x) => n + x.searches, 0);
-  const cost = PRICE[model].map((p) => (inTok * p.in + outTok * p.out) / 1e6);
+  const cost = PRICE[model.split('@')[0]].map((p) => (inTok * p.in + outTok * p.out) / 1e6);
   return { model, text: r.text, firstMs: r.firstMs, totalMs: r.totalMs, calls: calls.length, inTok, outTok, thinkTok: calls.reduce((n, x) => n + x.thinkTok, 0), searches, tokenCost: cost, searchCost: searches * SEARCH };
 }
 
