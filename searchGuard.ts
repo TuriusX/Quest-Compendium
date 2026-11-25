@@ -4,7 +4,7 @@
  * Search grounding on Gemini 3 is billed per search query the model runs (one question can run several): $14 per 1,000
  * from the first query (no free allowance for this project: the Nov 2026 bill). Three guards, all tunable with
  * environment variables:
- *   - per player per day: FREE_DAILY_SEARCHES (default 3), PREMIUM_DAILY_SEARCHES (default 10); counted on the player's
+ *   - per player per day: FREE_DAILY_SEARCHES (default 3), PREMIUM_DAILY_SEARCHES (default 25; was 10 until Nov 24 2026); counted on the player's
  *     user document (searchesToday / searchDay). Guests share the free allowance, counted in memory per guest id.
  *   - per month, two separate shares, counted in Firestore at searchMonths/{YYYY-MM} { count, pipeline, players,
  *     flagship } (count: all of them; atomic increments, so concurrent writers never lose a count; months before
@@ -28,7 +28,8 @@ import { apiLimits, searchesToday, recordSearchDay, playerSearchOk } from './api
 
 const num = (v: string | undefined, d: number) => (v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
 const FREE_DAILY = () => num(process.env.FREE_DAILY_SEARCHES, 3);
-const PREMIUM_DAILY = () => num(process.env.PREMIUM_DAILY_SEARCHES, 10);
+// 25 since Nov 24 2026 (owner: one answer can run 4-7 searches, so 10 was 2-3 searched answers a day out of 25 questions).
+const PREMIUM_DAILY = () => num(process.env.PREMIUM_DAILY_SEARCHES, 25);
 /**
  * The players' own searches a month (their reserve; the pipeline never uses it): that month's own reserve in
  * PLAYER_MONTHLY_SEARCHES_BY_MONTH ("2026-12:6000,2027-01:6000"; owner, Nov 16 2026: the holidays), else
