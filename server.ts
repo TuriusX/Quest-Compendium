@@ -1322,7 +1322,7 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       // asks; voice questions too unless config/chatRouting.lightVoice is false (the server can't read them first).
       const asVoice = !!req.body.audioBase64, standIn = !asVoice && isStandInQuestion(String(question || ''));
       const effortCfg = await routing();
-      const lightFirst = !site && effortCfg.lightFirst !== false;
+      const lightFirst = !site && effortCfg.lightFirst === true; // off since Nov 24 2026 evening (owner: back to medium first)
       const lookup = !site && (lightFirst
         ? (asVoice ? effortCfg.lightVoice !== false
           : !needsMedium(String(question || ''), { quick: isQuickId(req.body.quick) ? req.body.quick : null, hasImage: !!imageBase64, standIn }))

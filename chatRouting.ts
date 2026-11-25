@@ -44,15 +44,16 @@ export type Routing = {
   voiceRule?: boolean;
   /**
    * Light answers first (owner, Nov 24 2026; src/utils/answerEffort.ts): the light answer (geminiFast) for every app
-   * question except what next, puzzles, builds, details on the screen, long questions and voice. On unless set false
-   * (false: the medium answer first, as before, with only simple lookups light).
+   * question except what next, puzzles, builds, details on the screen, long questions and voice. OFF unless set true
+   * (owner, Nov 24 2026, the same evening: light answers didn't know where he was and filled the quest log worse;
+   * "switch back to the way it was"). Off: the medium answer first, with only simple lookups light.
    */
   lightFirst?: boolean;
   /** Voice questions light too (owner, Nov 24 2026: a third of all questions; the server can't read them first). On unless set false. */
   lightVoice?: boolean;
 };
 export type Thinking = 'low' | 'medium' | 'high';
-export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [], openaiOwner: false, openaiSite: false, openaiHelpers: false, promptSplit: false, geminiPro: '', geminiProThinking: 'low', geminiFast: '', geminiFastThinking: 'low', proFallback: '', voiceRule: false, lightFirst: true, lightVoice: true };
+export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [], openaiOwner: false, openaiSite: false, openaiHelpers: false, promptSplit: false, geminiPro: '', geminiProThinking: 'low', geminiFast: '', geminiFastThinking: 'low', proFallback: '', voiceRule: false, lightFirst: false, lightVoice: true };
 const geminiName = (v: unknown) => (/^gemini-[a-z0-9.-]+$/i.test(String(v || '')) ? String(v) : '');
 const thinking = (v: unknown, d: Thinking): Thinking => (v === 'low' || v === 'medium' || v === 'high' ? v : d);
 
@@ -95,7 +96,7 @@ export function normalizeRouting(d: any): Routing {
     geminiFastThinking: thinking(d?.geminiFastThinking, 'low'),
     proFallback: geminiName(d?.proFallback),
     voiceRule: d?.voiceRule === true,
-    lightFirst: d?.lightFirst !== false,
+    lightFirst: d?.lightFirst === true,
     lightVoice: d?.lightVoice !== false,
   };
 }
