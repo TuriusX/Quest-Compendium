@@ -13,14 +13,38 @@
  * Manager (igdb-client-secret, env IGDB_CLIENT_SECRET), never logged. The same ones the pipeline's igdb.ts uses.
  */
 import { getFirestore } from 'firebase-admin/firestore';
-import { guideKeyFor } from './guidesApi';
+import { baseGameKey } from './guidesApi';
 
 export const IGDB_ID_BASE = 900_000_000;
 const PLATFORM_ORDER = ['PC', 'PS5', 'Series X|S', 'Switch 2', 'Switch', 'PS4', 'XONE', 'Mac', 'iOS', 'Android', 'PS3', 'X360', 'Wii U', '3DS', 'Wii', 'PS2', 'XBOX', 'NGC', 'DS', 'PSP', 'Vita', 'GBA', 'N64', 'PS1', 'SNES', 'GBC', 'GB', 'NES', 'Linux', 'Stadia'];
 
+/**
+ * The published guides, for the "guide" marks: the website's guides/index.json (the published list, small and fast)
+ * with each guide's Steam app id from Firestore (one read), for ten minutes. Not guidesApi's guide list, which reads
+ * every guide's pages and took longer than a search should wait on a fresh server (Nov 25 2026: no marks at all).
+ */
+type GuideRow = { key: string; base: string; appId: number };
+let guideRowsCache: { at: number; rows: Promise<GuideRow[]> } | null = null;
+const ROMAN: Record<string, string> = { ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7', viii: '8', ix: '9', x: '10', xi: '11', xii: '12', xiii: '13', xv: '15', xvi: '16' };
+const nameKey = (name: string) => baseGameKey(name).split('-').map((w) => ROMAN[w] || w).join('-');
+function guideRows(): Promise<GuideRow[]> {
+  if (guideRowsCache && Date.now() - guideRowsCache.at < 10 * 60_000) return guideRowsCache.rows;
+  const rows = (async () => {
+    const [index, docs] = await Promise.all([
+      fetch('https://questcompendium.com/guides/index.json', { signal: AbortSignal.timeout(4000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      getFirestore().collection('guides').select('appId').get().catch(() => null),
+    ]);
+    const appIds = new Map<string, number>((docs?.docs || []).map((d) => [d.id, Number(d.get('appId')) || 0]));
+    return ((index?.games || []) as any[]).map((g) => ({ key: String(g.key), base: nameKey(String(g.game || g.key)), appId: appIds.get(String(g.key)) || 0 }));
+  })();
+  guideRowsCache = { at: Date.now(), rows };
+  rows.then((r) => { if (!r.length) guideRowsCache = null; }).catch(() => { guideRowsCache = null; });
+  return rows;
+}
+
 /** Loads the guide list in the background (server start), so the first searches can mark the games with a guide. */
 export function warmGameSearch(): void {
-  void guideKeyFor('warm-up').catch(() => null);
+  void guideRows().catch(() => null);
 }
 const STEAM_SOURCE = 1;
 
@@ -137,12 +161,14 @@ export async function searchGames(query: string): Promise<Hit[]> {
     out.push(s);
   }
   const games = out.slice(0, 16);
-  // The guide marks, when the guide list is at hand within 1.5 s (a cold list takes far longer; the search doesn't wait).
-  let marked = false;
-  await Promise.race([
-    Promise.all(games.map(async (g) => { if (await guideKeyFor(g.name, g.appId < IGDB_ID_BASE ? g.appId : undefined).catch(() => null)) g.guide = true; })).then(() => { marked = true; }),
-    new Promise((r) => setTimeout(r, 1500)),
-  ]);
+  // The guide marks: the same Steam app, or the same name without editions (roman numerals as digits).
+  const rows = await guideRows().catch(() => [] as GuideRow[]);
+  const marked = rows.length > 0;
+  for (const g of games) {
+    const steamId = g.appId < IGDB_ID_BASE ? g.appId : 0;
+    const base = nameKey(g.name);
+    if (rows.some((r) => (steamId && r.appId === steamId) || r.base === base)) g.guide = true;
+  }
   // Games with a guide first, otherwise IGDB's order (its relevance) with the Steam store's extras after.
   games.sort((a, b) => Number(!!b.guide) - Number(!!a.guide));
   if (igdb && marked) remember(k, games); // not when IGDB failed or the marks weren't ready: the next search tries again
