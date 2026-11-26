@@ -56,17 +56,28 @@ async function igdbGames(q: string): Promise<Hit[] | null> {
   const auth = await igdbAuth().catch(() => null);
   if (!auth) return null;
   const safe = q.replace(/["\\]/g, ' ').slice(0, 80);
-  const body = `search "${safe}"; fields name,first_release_date,game_type,total_rating_count,cover.image_id,platforms.abbreviation,platforms.name,external_games.external_game_source,external_games.category,external_games.uid,version_parent; where version_parent = null; limit 12;`;
-  const r = await fetch('https://api.igdb.com/v4/games', {
-    method: 'POST',
-    headers: { 'Client-ID': auth.clientId, Authorization: `Bearer ${auth.token}`, 'Content-Type': 'text/plain' },
-    body,
-    signal: AbortSignal.timeout(4000),
-  }).catch(() => null);
-  if (!r) return null;
-  if (r.status === 401) tokenCache = null;
-  if (!r.ok) return null;
-  const rows: any[] = await r.json().catch(() => []);
+  const FIELDS = 'fields name,first_release_date,game_type,total_rating_count,cover.image_id,platforms.abbreviation,platforms.name,external_games.external_game_source,external_games.category,external_games.uid,version_parent;';
+  const query = async (body: string): Promise<any[] | null> => {
+    const r = await fetch('https://api.igdb.com/v4/games', {
+      method: 'POST',
+      headers: { 'Client-ID': auth.clientId, Authorization: `Bearer ${auth.token}`, 'Content-Type': 'text/plain' },
+      body,
+      signal: AbortSignal.timeout(4000),
+    }).catch(() => null);
+    if (!r) return null;
+    if (r.status === 401) tokenCache = null;
+    if (!r.ok) return null;
+    return r.json().catch(() => []);
+  };
+  // IGDB's text search doesn't weigh popularity ("zelda" missed Breath of the Wild, "pokemon" was fan games): the
+  // matches players have rated (sorted by how many below), and the plain matches for rare games.
+  const [ratedRows, anyRows] = await Promise.all([
+    query(`search "${safe}"; ${FIELDS} where version_parent = null & total_rating_count > 5; limit 50;`),
+    query(`search "${safe}"; ${FIELDS} where version_parent = null; limit 15;`),
+  ]);
+  if (!ratedRows && !anyRows) return null;
+  const seen = new Set<number>();
+  const rows: any[] = [...(ratedRows || []), ...(anyRows || [])].filter((g) => !seen.has(g.id) && (seen.add(g.id), true));
   // Games, expansions and new versions of games; not mods, forks, add-on packs, bundles or updates (IGDB game_type:
   // 1 DLC, 3 bundle, 5 mod, 12 fork, 13 pack, 14 update). The games most players have rated first (fan projects rarely
   // are), the rest in IGDB's own order.
