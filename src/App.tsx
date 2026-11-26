@@ -2175,7 +2175,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     const logPatch = logWithout(tab.questLog, ids);
     const logBefore = logPatch ? (Object.fromEntries(Object.keys(logPatch).map((k) => [k, (tab.questLog as any)?.[k]])) as QaDeleted['logBefore']) : undefined;
     setTabs((prev) => prev.map((t) => (t.id === tab.id
-      ? { ...t, messages: t.messages.filter((m) => !ids.includes(m.id)), ...(logPatch ? { questLog: nextLogState(t.questLog, logPatch) } : {}) }
+      // lastActive: this copy is the newer one, or a sync in the 8 seconds before the delete is final brings the pair back
+      // from the account's copy (owner, Nov 25 2026: "I have to delete it twice before they go away").
+      ? { ...t, messages: t.messages.filter((m) => !ids.includes(m.id)), lastActive: Date.now(), ...(logPatch ? { questLog: nextLogState(t.questLog, logPatch) } : {}) }
       : t)));
     const gone = playRef.current.entries.filter((e) => e.msgId && ids.includes(e.msgId));
     if (gone.length) updatePlay((p) => forgetAnswers(p, ids));
@@ -2194,7 +2196,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       if (t.id !== d.tabId) return t;
       const msgs = [...t.messages];
       for (const r of d.removed) msgs.splice(Math.min(r.at, msgs.length), 0, r.msg);
-      return { ...t, messages: msgs, ...(d.logBefore ? { questLog: nextLogState(t.questLog, d.logBefore) } : {}) };
+      return { ...t, messages: msgs, lastActive: Date.now(), ...(d.logBefore ? { questLog: nextLogState(t.questLog, d.logBefore) } : {}) };
     }));
     if (d.gone.length) {
       const back = new Set(d.gone.map((e) => e.id));
