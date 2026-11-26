@@ -280,16 +280,27 @@ function GameView({ who, game, locale, language, style, onAnswered, onBack, me, 
   useEffect(() => {
     if (!who.user) return;
     let alive = true;
-    cloudTabs(who.user.uid).then((tabs) => {
+    const uid = who.user.uid;
+    cloudTabs(uid).then(async (tabs) => {
+      if (!alive) return;
       const tab = tabFor(tabs, game);
-      if (!alive || !tab) return;
-      const fromCloud = turnsOf(tab);
-      setState((s) => {
-        const inCloud = new Set(fromCloud.map((x) => x.id));
-        const onlyHere = s.turns.filter((x) => !inCloud.has(`c-w${x.id}-q`));
-        const turns = [...fromCloud, ...onlyHere].sort((a, b) => a.at - b.at).slice(-40);
-        return { ...s, turns, place: placeOf(tab) || s.place };
-      });
+      const inCloud = new Set((tab?.messages || []).map((m) => m.id));
+      if (tab) {
+        const fromCloud = turnsOf(tab);
+        setState((s) => {
+          const shown = new Set(fromCloud.map((x) => x.id));
+          const onlyHere = s.turns.filter((x) => !shown.has(`c-w${x.id}-q`));
+          const turns = [...fromCloud, ...onlyHere].sort((a, b) => a.at - b.at).slice(-40);
+          return { ...s, turns, place: placeOf(tab) || s.place };
+        });
+      }
+      // Questions asked on this device before they were saved to the account (or while it couldn't be reached): added
+      // now, oldest first, so the desktop app gets them too. Each is added once (the merge skips a message it has).
+      const behind = loadGame(game).turns.filter((x) => x.answer && !x.id.startsWith('c-') && !inCloud.has(`w${x.id}-q`)).sort((a, b) => a.at - b.at);
+      for (const x of behind) {
+        if (!alive) return;
+        await addTurn(uid, game, x, null);
+      }
     });
     return () => { alive = false; };
   }, [who.user?.uid, game]);

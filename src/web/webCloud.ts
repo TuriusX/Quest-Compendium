@@ -69,7 +69,7 @@ export function placeOf(tab?: GameTab): Place | null {
 export function withTurn(cloud: TabState, game: Game, turn: Turn, place: Place | null, now = Date.now()): { tabs: GameTab[]; deleted: TabState['deleted']; changed: boolean; id: string } {
   const user: ChatMessage = { id: `w${turn.id}-q`, role: 'user', text: turn.voice ? '🎤 Voice question' : turn.q, timestamp: turn.at } as ChatMessage;
   const ai: ChatMessage = removeUndefinedFields({
-    id: `w${turn.id}-a`, role: 'assistant', text: turn.answer, timestamp: Math.max(now, turn.at + 1), modelUsed: 'web',
+    id: `w${turn.id}-a`, role: 'assistant', text: turn.answer, timestamp: (turn.at || now) + 1, modelUsed: 'web',
     ...(turn.sources?.length ? { sourceLinks: turn.sources } : {}),
     ...(turn.visual ? { visual: turn.visual } : {}),
   }) as ChatMessage;
