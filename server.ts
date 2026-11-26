@@ -19,6 +19,7 @@ import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard, clientIp } from './guestGuard';
 import { registerEmailSignIn, freePoolKeys, isDisposable, poolLeft } from './emailSignIn';
 import { cleanTag, recordGetApp, recordSignupSource, recordVisit } from './visitSources';
+import { searchGames, warmGameSearch } from './gameSearch';
 import { recordGroundingMiss, registerBlueprints } from './blueprints';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine, registerRefind } from './locate';
@@ -959,23 +960,11 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       return res.json({ games: [] });
     }
 
+    // Every game on every platform (IGDB) plus the Steam store, games with a guide marked (gameSearch.ts).
     try {
-      const response = await fetch(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(query)}&l=english&cc=US`, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const items = data.items || [];
-        const games = items.map((item: any) => ({
-          appId: item.id,
-          name: item.name,
-          headerImage: item.tiny_image || `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/header.jpg`,
-          price: item.price ? (item.price.final / 100).toFixed(2) : 'Free'
-        }));
-        return res.json({ games });
-      }
+      return res.json({ games: await searchGames(query) });
     } catch (err) {
-      console.error('Steam search error:', err);
+      console.error('Game search error:', err);
     }
     res.json({ games: [] });
   });
@@ -3325,6 +3314,7 @@ percentages:
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[DEPLOYMENT] Quest Compendium Server v1.1.0 running on http://localhost:${PORT}`);
+    warmGameSearch(); // the guide list, so the first game searches can mark games with a guide
   });
 }
 

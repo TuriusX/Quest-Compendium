@@ -39,6 +39,9 @@ export const QuickGameSearchModal: React.FC<QuickGameSearchModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<SteamGameData[]>([]);
   const [isSearchingOnline, setIsSearchingOnline] = useState(false);
+  // One search a pause in typing, and only the latest answer shown (the server asks IGDB and Steam each time).
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = React.useRef('');
 
   if (!isOpen) return null;
 
@@ -56,8 +59,14 @@ export const QuickGameSearchModal: React.FC<QuickGameSearchModalProps> = ({
     );
     setSearchResults(localMatches);
 
-    // Online Steam store search lookup
-    if (term.length >= 2) {
+    // Every game on every platform (IGDB) plus the Steam store, from the server (gameSearch.ts), after a short pause.
+    latest.current = term;
+    if (timer.current) clearTimeout(timer.current);
+    if (term.trim().length >= 2) timer.current = setTimeout(() => void searchOnline(term, localMatches), 300);
+  };
+
+  const searchOnline = async (term: string, localMatches: SteamGameData[]) => {
+    {
       try {
         setIsSearchingOnline(true);
         const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
@@ -66,23 +75,24 @@ export const QuickGameSearchModal: React.FC<QuickGameSearchModalProps> = ({
             ...(token ? { 'Authorization': `Bearer ${token}` } : {})
           }
         });
-        if (res.ok) {
+        if (res.ok && latest.current === term) {
           const data = await res.json();
           if (data.games && data.games.length > 0) {
             const onlineGames: SteamGameData[] = data.games.map((g: any) => ({
               name: g.name,
               appId: g.appId,
               headerImage: g.headerImage,
-              genre: 'Steam Game',
-              developer: 'Steam Store',
+              genre: g.genre || 'PC (Steam)',
+              developer: g.guide ? '✓ guide' : '',
               achievements: [],
               totalAchievements: 0,
               unlockedAchievements: 0
             }));
             
             // Combine, avoiding duplicates
-            const combined = [...localMatches];
-            onlineGames.forEach(og => {
+            // The server's order first (games with a guide, then the best matches), the popular list's extras after.
+            const combined: SteamGameData[] = [];
+            [...onlineGames, ...localMatches].forEach(og => {
               if (!combined.some(c => c.appId === og.appId || c.name.toLowerCase() === og.name.toLowerCase())) {
                 combined.push(og);
               }
@@ -91,7 +101,7 @@ export const QuickGameSearchModal: React.FC<QuickGameSearchModalProps> = ({
           }
         }
       } catch (err) {
-        console.log('Steam online search fallback:', err);
+        console.log('Online game search fallback:', err);
       } finally {
         setIsSearchingOnline(false);
       }
@@ -136,7 +146,7 @@ export const QuickGameSearchModal: React.FC<QuickGameSearchModalProps> = ({
                   GAME COMPENDIUM SELECTOR
                 </h3>
                 <p className="text-[11px] text-zinc-400 font-mono">
-                  Link active PC game or load custom quest guide
+                  Any game: PC, console or handheld
                 </p>
               </div>
             </div>
@@ -156,7 +166,7 @@ export const QuickGameSearchModal: React.FC<QuickGameSearchModalProps> = ({
             <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search Elden Ring, Baldur's Gate 3, Cyberpunk, Hades, or type any title..."
+              placeholder="Search any game: PC, console or handheld…"
               value={searchTerm}
               onChange={(e) => handleSearch(e.target.value)}
               autoFocus
@@ -169,7 +179,7 @@ export const QuickGameSearchModal: React.FC<QuickGameSearchModalProps> = ({
         <div className="p-4 overflow-y-auto space-y-2 flex-1">
           {displayList.length === 0 ? (
             <div className="text-center py-10 space-y-3">
-              <p className="text-xs text-zinc-400">No Steam title matched "{searchTerm}"</p>
+              <p className="text-xs text-zinc-400">{isSearchingOnline ? 'Searching…' : `No game matched "${searchTerm}"`}</p>
               <button
                 onClick={handleCustomGame}
                 className="px-4 py-2.5 rounded-xl bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 transition-opacity cursor-pointer inline-flex items-center gap-2 shadow-sm"
@@ -193,7 +203,7 @@ export const QuickGameSearchModal: React.FC<QuickGameSearchModalProps> = ({
                     </div>
                     <div className="text-[11px] text-zinc-400 font-sans flex items-center gap-2 truncate">
                       <span>{game.genre || 'Action / RPG'}</span>
-                      {game.developer && <span className="hidden sm:inline text-zinc-500">• {game.developer}</span>}
+                      {game.developer === '✓ guide' ? <span className="text-[var(--accent-color)]">✓ guide</span> : game.developer && <span className="hidden sm:inline text-zinc-500">• {game.developer}</span>}
                     </div>
                   </div>
                 </div>
