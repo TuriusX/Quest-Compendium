@@ -1,0 +1,79 @@
+/*
+ * The new web app's look (src/web): phone first, one column, the product's night palette with its purple, the pixel face
+ * only for headings. Scoped to .qcw so the overlay's styles (index.css, the "lofi" look) don't reach it and it doesn't
+ * reach them; <html data-ui="web"> while it runs turns the lofi rules off.
+ */
+.qcw {
+  --w-bg: #0c0d14;
+  --w-panel: #151622;
+  --w-panel-2: #1c1d2c;
+  --w-line: #2a2b3d;
+  --w-ink: #ecebf5;
+  --w-dim: #a3a0ba;
+  --w-faint: #6f6c86;
+  --w-acc: #a87ffb;
+  --w-acc-ink: #150d26;
+  --w-acc-dim: rgba(168, 127, 251, 0.14);
+  --w-acc-line: rgba(168, 127, 251, 0.4);
+  --w-bad: #fb923c;
+  --w-head: 'Pixelify Sans', 'Silkscreen', ui-monospace, monospace;
+  --w-body: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: dark;
+  background: var(--w-bg);
+  color: var(--w-ink);
+  font-family: var(--w-body);
+  font-size: 15px;
+  line-height: 1.55;
+  min-height: 100dvh;
+  -webkit-tap-highlight-color: transparent;
+}
+.qcw * { box-sizing: border-box; }
+.qcw :focus-visible { outline: 2px solid var(--w-acc); outline-offset: 2px; border-radius: 8px; }
+.qcw .w-head { font-family: var(--w-head); font-weight: 600; letter-spacing: 0.01em; line-height: 1.2; text-wrap: balance; }
+.qcw .w-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--w-faint); font-weight: 600; }
+.qcw .w-col { width: 100%; max-width: 680px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.qcw .w-card { background: var(--w-panel); border: 1px solid var(--w-line); border-radius: 16px; }
+.qcw .w-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--w-line); background: transparent; border-radius: 999px; padding: 7px 13px; font-size: 13.5px; color: var(--w-ink); cursor: pointer; transition: border-color .15s, background .15s; }
+.qcw .w-chip:hover { border-color: var(--w-acc-line); background: var(--w-acc-dim); }
+.qcw .w-place { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--w-acc); background: var(--w-acc-dim); border-radius: 999px; padding: 2px 9px; max-width: 100%; }
+.qcw .w-place span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qcw .w-icon-btn { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 12px; border: 0; background: var(--w-panel-2); color: var(--w-ink); cursor: pointer; }
+.qcw .w-icon-btn:hover { background: #26273a; }
+.qcw .w-icon-btn.on { background: var(--w-bad); color: #1a0d03; }
+.qcw .w-send { background: var(--w-acc); color: var(--w-acc-ink); }
+.qcw .w-send:hover { background: #b896ff; }
+.qcw .w-send:disabled { background: var(--w-panel-2); color: var(--w-faint); cursor: default; }
+.qcw .w-cover { flex: none; border-radius: 8px; object-fit: cover; background: linear-gradient(160deg, #2c2442, #151622); }
+.qcw .w-guide { font-size: 11.5px; color: var(--w-acc); font-weight: 600; white-space: nowrap; }
+.qcw .w-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; border: 0; background: transparent; border-radius: 12px; text-align: left; cursor: pointer; }
+.qcw .w-row:hover { background: var(--w-panel-2); }
+.qcw .w-input { width: 100%; background: var(--w-panel); border: 1px solid var(--w-line); border-radius: 14px; padding: 13px 14px 13px 42px; color: var(--w-ink); font: inherit; font-size: 16px; outline: none; }
+.qcw .w-input:focus { border-color: var(--w-acc-line); }
+.qcw .w-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: rgba(12, 13, 20, 0.94); backdrop-filter: blur(10px); border-top: 1px solid var(--w-line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.qcw .w-tab { flex: 1; display: grid; justify-items: center; gap: 2px; padding: 8px 4px 9px; font-size: 11px; color: var(--w-faint); background: none; border: 0; cursor: pointer; text-decoration: none; }
+.qcw .w-tab.on { color: var(--w-acc); }
+.qcw .w-answer { font-size: 15.5px; line-height: 1.65; overflow-wrap: anywhere; }
+.qcw .w-answer p { margin: 0 0 0.75em; }
+.qcw .w-answer p:last-child { margin-bottom: 0; }
+.qcw .w-answer ul, .qcw .w-answer ol { margin: 0 0 0.75em; padding-left: 1.25em; }
+.qcw .w-answer ul { list-style: disc; }
+.qcw .w-answer ol { list-style: decimal; }
+.qcw .w-answer li { margin: 0.25em 0; }
+.qcw .w-answer li::marker { color: var(--w-acc); }
+.qcw .w-answer strong { color: #fff; font-weight: 700; }
+.qcw .w-answer a { color: var(--w-acc); text-decoration: underline; text-underline-offset: 2px; }
+.qcw .w-answer h1, .qcw .w-answer h2, .qcw .w-answer h3 { font-family: var(--w-head); font-size: 1.05em; margin: 1em 0 0.4em; font-weight: 600; }
+.qcw .w-answer code { font-size: 0.88em; background: var(--w-panel-2); padding: 1px 5px; border-radius: 5px; }
+.qcw .w-answer table { border-collapse: collapse; display: block; overflow-x: auto; margin: 0 0 0.75em; font-size: 0.92em; }
+.qcw .w-answer th, .qcw .w-answer td { border: 1px solid var(--w-line); padding: 5px 8px; text-align: left; }
+.qcw .w-sheet-back { position: fixed; inset: 0; z-index: 40; background: rgba(4, 4, 9, 0.7); display: flex; align-items: flex-end; justify-content: center; }
+.qcw .w-sheet { width: 100%; max-width: 480px; background: var(--w-panel); border: 1px solid var(--w-line); border-radius: 20px 20px 0 0; padding: 20px max(18px, env(safe-area-inset-left, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)); }
+@media (min-width: 640px) { .qcw .w-sheet-back { align-items: center; } .qcw .w-sheet { border-radius: 20px; } }
+.qcw .w-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; padding: 11px 16px; font-weight: 600; border: 0; cursor: pointer; }
+.qcw .w-btn.primary { background: #fff; color: #111; }
+.qcw .w-btn.ghost { background: transparent; border: 1px solid var(--w-line); color: var(--w-ink); }
+.qcw .w-dots span { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--w-acc); animation: qcw-dot 1.2s infinite ease-in-out; }
+.qcw .w-dots span:nth-child(2) { animation-delay: .15s; }
+.qcw .w-dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes qcw-dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .qcw .w-dots span { animation: none; opacity: .7; } }
