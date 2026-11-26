@@ -58,7 +58,7 @@ function headers(tok: string | null): Record<string, string> {
   };
 }
 
-export type Game = { name: string; appId: number; art?: string; platforms?: string; guide?: boolean };
+export type Game = { name: string; appId: number; art?: string; platforms?: string; guide?: boolean; guideKey?: string };
 export type Place = { name: string; story?: string; checkedAt?: number; [k: string]: unknown };
 
 export type Turn = {
@@ -77,7 +77,13 @@ export type Turn = {
   getApp?: boolean;
 };
 
-export type AskResult = Pick<Turn, 'answer' | 'sources' | 'guideRefs' | 'problem'> & { place?: Place | null };
+export type AskResult = Pick<Turn, 'answer' | 'sources' | 'guideRefs' | 'problem'> & {
+  place?: Place | null;
+  /** Choices made and key items the answer noted (Your playthrough). */
+  remember?: { kind: 'choice' | 'found'; text: string }[];
+  /** Quests the answer says are finished (sent back as what's done). */
+  done?: string[];
+};
 
 export async function ask(w: Who, o: {
   game: Game;
@@ -88,6 +94,11 @@ export async function ask(w: Who, o: {
   history: Turn[];
   place?: Place | null;
   language: string;
+  /** 'pro' (Thorough, the default) or 'flash' (Quick); the server switches when one is used up. */
+  model?: 'pro' | 'flash';
+  guideKey?: string;
+  playthrough?: unknown;
+  done?: string[];
 }): Promise<AskResult> {
   const tok = await token(w);
   const history = o.history
@@ -106,11 +117,13 @@ export async function ask(w: Who, o: {
         history,
         imageBase64: o.image,
         audioBase64: o.audio,
-        answerModel: 'pro',
+        answerModel: o.model === 'flash' ? 'fast' : 'pro',
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         ...(o.quick ? { quick: o.quick } : {}),
         isGameRunningLocally: false,
         tabName: o.game.name,
+        ...(o.guideKey ? { guideKey: o.guideKey } : {}),
+        ...(o.playthrough ? { playthrough: o.playthrough } : {}),
         activeGame: { name: o.game.name, ...(o.game.appId ? { appId: o.game.appId } : {}) },
         achievements: [],
         news: [],
@@ -118,7 +131,7 @@ export async function ask(w: Who, o: {
         language: o.language,
         markers: false,
         place: o.place || null,
-        done: [],
+        done: (o.done || []).slice(0, 30),
       }),
     });
     const data: any = await res.json().catch(() => ({}));
@@ -136,6 +149,8 @@ export async function ask(w: Who, o: {
       sources: Array.isArray(data.sourceLinks) ? data.sourceLinks.filter((l: any) => l && /^https:\/\//.test(String(l.url || ''))) : undefined,
       guideRefs: Array.isArray(data.guideRefs) ? data.guideRefs.slice(0, 6) : undefined,
       place: data.place && typeof data.place === 'object' && data.place.name ? data.place : undefined,
+      remember: (Array.isArray(data.remember) ? data.remember : []).filter((x: any) => x && (x.kind === 'choice' || x.kind === 'found') && typeof x.text === 'string').slice(0, 3),
+      done: (Array.isArray(data.done) ? data.done : []).filter((x: unknown) => typeof x === 'string').slice(0, 3),
     };
   } catch {
     return { problem: { text: 'The answer took too long or the connection dropped. Try again.' } };
@@ -169,8 +184,27 @@ export async function searchGames(w: Who, q: string): Promise<Game[]> {
     const res = await fetch(`${getApiBaseUrl()}/api/steam/search?q=${encodeURIComponent(q)}`, { headers: tok ? { Authorization: `Bearer ${tok}` } : {} });
     if (!res.ok) return [];
     const data: any = await res.json();
-    return (data.games || []).map((g: any) => ({ name: String(g.name), appId: Number(g.appId) || 0, art: g.headerImage, platforms: g.genre, guide: !!g.guide }));
+    return (data.games || []).map((g: any) => ({ name: String(g.name), appId: Number(g.appId) || 0, art: g.headerImage, platforms: g.genre, guide: !!g.guide, ...(g.guideKey ? { guideKey: String(g.guideKey) } : {}) }));
   } catch {
     return [];
+  }
+}
+
+export type Status = { isGuest?: boolean; isPremium?: boolean; proQueriesAvailable?: number; flashQueriesAvailable?: number; [k: string]: unknown };
+
+/**
+ * The player's questions left and plan (GET /api/user/status). Signed in, it also records a new account's first source
+ * (the daily summary's sign-ups by source), as the old app's start does.
+ */
+export async function userStatus(w: Who, fresh = false): Promise<Status | null> {
+  try {
+    const tok = await token(w);
+    if (!tok) return null;
+    const res = await fetch(`${getApiBaseUrl()}/api/user/status${fresh ? '?fresh=1' : ''}`, { headers: { ...headers(tok), 'X-QC-TZ': Intl.DateTimeFormat().resolvedOptions().timeZone } });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    return data && typeof data.proQueriesAvailable === 'number' ? data : null;
+  } catch {
+    return null;
   }
 }

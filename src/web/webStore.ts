@@ -45,13 +45,14 @@ export function forgetGame(g: Game): void {
   }
 }
 
-export type GameState = { place: Place | null; turns: Turn[] };
+export type GameState = { place: Place | null; turns: Turn[]; done?: string[] };
 
 export function loadGame(g: Game): GameState {
   const s = read<GameState>(GAME(gameId(g)), { place: null, turns: [] });
-  return { place: s.place || null, turns: Array.isArray(s.turns) ? s.turns : [] };
+  return { place: s.place || null, turns: Array.isArray(s.turns) ? s.turns : [], done: Array.isArray(s.done) ? s.done : [] };
 }
 
 export function saveGame(g: Game, s: GameState): void {
-  write(GAME(gameId(g)), { place: s.place, turns: s.turns.filter((t) => t.answer || t.problem).slice(-MAX_TURNS) });
+  // Photos stay out (a small preview only while the page is open), so a long conversation fits the browser's storage.
+  write(GAME(gameId(g)), { place: s.place, done: (s.done || []).slice(0, 30), turns: s.turns.filter((t) => t.answer || t.problem).slice(-MAX_TURNS).map(({ thumb: _t, ...rest }) => rest) });
 }

@@ -48,7 +48,7 @@ export function warmGameSearch(): void {
 }
 const STEAM_SOURCE = 1;
 
-type Hit = { appId: number; name: string; headerImage?: string; price?: string; genre?: string; guide?: boolean };
+type Hit = { appId: number; name: string; headerImage?: string; price?: string; genre?: string; guide?: boolean; guideKey?: string };
 
 let tokenCache: { token: string; until: number; clientId: string } | null = null;
 async function igdbAuth(): Promise<{ token: string; clientId: string } | null> {
@@ -167,7 +167,8 @@ export async function searchGames(query: string): Promise<Hit[]> {
   for (const g of games) {
     const steamId = g.appId < IGDB_ID_BASE ? g.appId : 0;
     const base = nameKey(g.name);
-    if (rows.some((r) => (steamId && r.appId === steamId) || r.base === base)) g.guide = true;
+    const row = rows.find((r) => (steamId && r.appId === steamId) || r.base === base);
+    if (row) { g.guide = true; g.guideKey = row.key; }
   }
   // Games with a guide first, otherwise IGDB's order (its relevance) with the Steam store's extras after.
   games.sort((a, b) => Number(!!b.guide) - Number(!!a.guide));

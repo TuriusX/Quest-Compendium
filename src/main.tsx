@@ -18,23 +18,28 @@ if (!(window as any).electronAPI && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => void r.unregister())).catch(() => {});
 }
 
-// The new web app (src/web, owner Nov 25 2026), on the website only, behind a switch while it's built: ?new=1 turns it
-// on for this browser, ?new=0 back off.
-const NEW_WEB = 'qcw_on';
+// The new web app (src/web) is the web app for everyone (owner, Nov 25 2026: "i want the new app to show immediately for
+// everyone"); never in the desktop app. The old screens stay for what only they do: the desktop app's browser sign-in
+// (/desktop-login), the email sign-in link (/email-signin), the desktop settings window (#settings), the companion
+// window (#companion), Steam linking (?steamId=), and anyone who picked "Use the old web app" (?new=0; ?new=1 undoes it).
+const OLD_WEB = 'qcw_off';
 const newWeb = (() => {
   if ((window as any).electronAPI) return false;
   try {
-    const p = new URLSearchParams(location.search).get('new');
-    if (p === '1') localStorage.setItem(NEW_WEB, '1');
-    if (p === '0') localStorage.removeItem(NEW_WEB);
+    const q = new URLSearchParams(location.search);
+    const p = q.get('new');
+    if (p === '0') localStorage.setItem(OLD_WEB, '1');
+    if (p === '1') localStorage.removeItem(OLD_WEB);
+    localStorage.removeItem('qcw_on'); // the switch from before it was the default
     if (p !== null) {
       const u = new URL(location.href);
       u.searchParams.delete('new');
       history.replaceState(history.state, '', u.pathname + u.search + u.hash);
     }
-    return localStorage.getItem(NEW_WEB) === '1';
+    const oldOnly = ['/email-signin', '/desktop-login'].includes(location.pathname) || /settings|companion/.test(location.hash) || q.has('steamId');
+    return !oldOnly && localStorage.getItem(OLD_WEB) !== '1';
   } catch {
-    return false;
+    return true;
   }
 })();
 const WebApp = lazy(() => import('./web/WebApp'));
