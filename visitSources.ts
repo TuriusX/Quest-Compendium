@@ -70,3 +70,17 @@ export function recordSignupSource(uid: string, src: string): void {
   if (!uid || isTestTraffic(uid)) return;
   void getFirestore().collection('stats').doc(statsDay()).set({ sourceSignups: { [src || 'unknown']: FieldValue.increment(1) }, updatedAt: Date.now() }, { merge: true }).catch(() => {});
 }
+
+/**
+ * The web app's "get it over your game" card (owner, Nov 25 2026: the value is the desktop and Deck apps; the web app
+ * is a place to try it): stats/{day}.getApp { shown, windows, store, deck, copy, dismiss }, one count per event.
+ */
+export const GET_APP_EVENTS = ['shown', 'windows', 'store', 'deck', 'copy', 'dismiss'] as const;
+export function recordGetApp(req: Request): void {
+  if (isLocalServer()) return;
+  const ua = String(req.headers['user-agent'] || '');
+  if (!ua || BOT.test(ua) || /Electron|QuestCompendiumDeck/i.test(ua)) return;
+  const ev = String((req.body as any)?.event || '');
+  if (!(GET_APP_EVENTS as readonly string[]).includes(ev)) return;
+  void getFirestore().collection('stats').doc(statsDay()).set({ getApp: { [ev]: FieldValue.increment(1) }, updatedAt: Date.now() }, { merge: true }).catch(() => {});
+}

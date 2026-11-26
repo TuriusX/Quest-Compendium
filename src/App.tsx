@@ -65,6 +65,7 @@ import { buildRecap, recapCard, RECAP_GAP_MS } from './utils/recap';
 import { readCloud, writeCloud } from './utils/playthroughCloud';
 import { PlaythroughPanel } from './components/PlaythroughPanel';
 import { appSource, isPhone } from './utils/source';
+import { getAppDue } from './components/GetAppCard';
 import { useGameArt } from './utils/gameArt';
 import { sharpIgdb, steamHeader, useArt } from './utils/artCache';
 import { deviceId } from './utils/deviceId';
@@ -3508,6 +3509,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         bannerImageUrl: data.bannerImageUrl,
         // A guest's last question today: the sign-in card shows under this answer.
         ...(data.signInNudge === true ? { signInNudge: true } : {}),
+        // The web app's second answer on this device (and later ones, see getAppDue): the desktop and Deck card under it.
+        ...(data.signInNudge !== true && getAppDue() ? { getAppNudge: true } : {}),
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
         ...(typeof data.title === 'string' && data.title.trim() ? { title: data.title.trim().slice(0, 60) } : {}),
         ...(typeof data.nowGoal === 'boolean' ? { nowGoal: data.nowGoal } : {}),

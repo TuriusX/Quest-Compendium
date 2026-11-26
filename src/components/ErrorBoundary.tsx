@@ -1,6 +1,8 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from './icons';
 
+import { reloadForMissingPart } from '../utils/newVersionReload';
+
 interface Props {
   children: ReactNode;
 }
@@ -8,6 +10,7 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  reloading?: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -21,6 +24,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // A part an older stored copy asked for after a release: reload onto the current version instead of this screen.
+    if (reloadForMissingPart(error)) { this.setState({ reloading: true }); return; }
     console.error('Uncaught error in Quest Compendium:', error, errorInfo);
   }
 
@@ -30,6 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public render() {
+    if (this.state.reloading) return <div className="w-screen h-screen bg-[#0c0d14]" />;
     if (this.state.hasError) {
       return (
         <div className="w-screen h-screen bg-[#0c0d14] text-zinc-100 flex flex-col items-center justify-center p-6 text-center select-none font-sans">

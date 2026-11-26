@@ -58,6 +58,7 @@ import { SourceLinks } from './SourceLinks';
 import { GlainIcon } from './GlainIcon';
 import { Walkthrough, walkthroughDone, OPEN_TOUR_EVENT } from './Walkthrough';
 import { SignInCard } from './SignInCard';
+import { GetAppCard } from './GetAppCard';
 import { PremiumCard } from './PremiumCard';
 import { isPhone } from '../utils/source';
 import { quickChips, quickLabelKey, type QuickId } from '../utils/quickQuestions';
@@ -2329,6 +2330,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         {/* A guest's last question today: one card under it (what signing in gives), dismissible for the day. */}
         {isGuest && onSignIn && !isLoading && activeTab?.messages?.length && activeTab.messages[activeTab.messages.length - 1].signInNudge ? (
           <SignInCard onSignIn={onSignIn} pro={quota?.signedInPro} fast={quota?.signedInFlash} />
+        ) : null}
+        {/* The web app: the desktop and Steam Deck card under an answer (GetAppCard.tsx). */}
+        {!isDesktopApp && !isLoading && activeTab?.messages?.length && activeTab.messages[activeTab.messages.length - 1].getAppNudge ? (
+          <GetAppCard />
         ) : null}
         {/* A free player out of questions: the Premium card under the limit message (not a pop-up), dismissible for the day. */}
         {!isGuest && onOpenPremium && !isLoading && quota?.isPremium !== true && activeTab?.messages?.length && activeTab.messages[activeTab.messages.length - 1].premiumNudge ? (

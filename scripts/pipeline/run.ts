@@ -1082,6 +1082,8 @@ async function main() {
     report.unshift(
       `📊 Yesterday: ${st.questions || 0} question(s) from ${players + guests} player(s) (${players} signed in, ${guests} guest${guests === 1 ? '' : 's'})${apps ? ` · ${apps}` : ''} · ${newAccounts} new sign-up(s), ${accounts} accounts in total`,
       sourcesLine,
+      // The web app's desktop/Deck card (src/components/GetAppCard.tsx): how often it showed and what was picked.
+      ...(st.getApp ? [`📲 Get-the-app card: shown ${st.getApp.shown || 0} · Windows ${st.getApp.windows || 0} · Store ${st.getApp.store || 0} · Steam Deck ${st.getApp.deck || 0} · link copied ${st.getApp.copy || 0} · closed ${st.getApp.dismiss || 0}`] : []),
     );
   } catch (e: any) {
     console.warn(`Activity summary skipped: ${e?.message}`);

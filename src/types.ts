@@ -88,6 +88,8 @@ export interface ChatMessage {
   signInNudge?: boolean;
   /** A free player's limit message: the Premium card under it (PremiumCard), never a pop-up. */
   premiumNudge?: boolean;
+  /** The web app: the desktop and Steam Deck card under this answer (GetAppCard). */
+  getAppNudge?: boolean;
   role: 'user' | 'assistant' | 'system';
   /** A side question (Nov 19 2026, utils/asideGame.ts): about another game, named; kept out of this game's history and memory. */
   aside?: string;

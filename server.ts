@@ -18,7 +18,7 @@ import cors from 'cors';
 import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard, clientIp } from './guestGuard';
 import { registerEmailSignIn, freePoolKeys, isDisposable, poolLeft } from './emailSignIn';
-import { cleanTag, recordSignupSource, recordVisit } from './visitSources';
+import { cleanTag, recordGetApp, recordSignupSource, recordVisit } from './visitSources';
 import { recordGroundingMiss, registerBlueprints } from './blueprints';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine, registerRefind } from './locate';
@@ -3284,6 +3284,12 @@ percentages:
 </html>`);
   });
 
+  // The web app's "get it over your game" card: shown, which download was clicked, closed (visitSources.ts).
+  app.post('/api/get-app', (req, res) => {
+    recordGetApp(req);
+    res.status(204).end();
+  });
+
   // Web app visits by source (?from= tag or referrer), for the daily summary (visitSources.ts).
   app.get(['/', '/index.html'], (req, _res, next) => {
     recordVisit(req, clientIp(req, Number(process.env.GUEST_PROXY_HOPS) || 1));
@@ -3304,6 +3310,9 @@ percentages:
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
+    // A built file that isn't here (an older stored copy of the app asking for a part a release removed): not found,
+    // never the page itself, which the browser can't run as a script (web audit Nov 25 2026).
+    app.get(/^\/assets\//, (_req, res) => { res.status(404).type('text/plain').send('Not found'); });
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
