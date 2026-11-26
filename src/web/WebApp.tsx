@@ -228,7 +228,7 @@ function Waiting() {
 
 function TurnView({ turn, busy, onSignIn }: { turn: Turn; busy: boolean; onSignIn: () => void }) {
   return (
-    <article style={{ display: 'grid', gap: 10 }}>
+    <article id={turn.id} style={{ display: 'grid', gap: 10, scrollMarginTop: 80 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         {turn.thumb && <img src={turn.thumb} alt="Your screenshot" style={{ width: 64, height: 48, objectFit: 'cover', borderRadius: 8, flex: 'none' }} />}
         <h2 className="w-head" style={{ fontSize: 18, margin: 0, paddingTop: 2 }}>{turn.voice ? 'Your voice question' : turn.q}</h2>
@@ -278,7 +278,9 @@ function GameView({ who, game, language, onBack, onAccount }: { who: Who; game: 
   const guide = useMemo(() => (guides || []).find((g) => norm(g.game) === norm(game.name)), [guides, game.name]);
 
   useEffect(() => saveGame(game, state), [game, state]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [state.turns.length, busy]);
+  // A new question (and the last one on opening the game): its heading at the top, so the answer reads from its start.
+  const lastId = state.turns[state.turns.length - 1]?.id;
+  useEffect(() => { if (lastId) document.getElementById(lastId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, [lastId]);
 
   // A screenshot pasted anywhere on the page (PC): attached to the next question.
   useEffect(() => {
@@ -469,7 +471,14 @@ export default function WebApp() {
     const prev = document.documentElement.dataset.ui;
     document.documentElement.dataset.ui = 'web';
     document.body.style.background = '#0c0d14';
-    return () => { if (prev) document.documentElement.dataset.ui = prev; };
+    // index.html's <body> has overflow-hidden for the old full-screen app: with it the page only moved by code (jump to
+    // the newest answer) and the player couldn't scroll back up through an answer (owner, Nov 25 2026).
+    const hidden = document.body.classList.contains('overflow-hidden');
+    document.body.classList.remove('overflow-hidden');
+    return () => {
+      if (prev) document.documentElement.dataset.ui = prev;
+      if (hidden) document.body.classList.add('overflow-hidden');
+    };
   }, []);
   useEffect(() => watchWho(setWho), []);
   useEffect(() => {
